@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform, SafeAreaView, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView, Image, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
-// Simple SVG approximations - you can replace these with your actual image later
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 const MailIcon = () => (
    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -27,14 +26,19 @@ const EyeOffIcon = () => (
    </Svg>
 );
 
-export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): React.ReactElement {
-  const { login } = useAuth();
+export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): React.ReactElement {
+  const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleSignIn = async () => {
-    await login(email, password);
+  const handleSignUp = async () => {
+    if (password !== confirmPassword) {
+      Alert.alert("Passwords do not match");
+      return;
+    }
+    // Setting name empty or prompt later, the context takes a generic name 'Manar'
+    await signUp(email, password, 'Manar'); 
   };
 
   return (
@@ -42,7 +46,6 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
       <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
           
-          {/* Logo */}
           <View style={s.logoContainer}>
              <Image 
                 source={require('../assets/logo.png')} 
@@ -50,11 +53,9 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
                 resizeMode="contain" 
              />
              <Text style={s.brandTitle}>Mentora</Text>
-             <Text style={s.brandSubtitle}>Welcome Back!</Text>
-             <Text style={s.brandDesc}>Sign in to continue your journey</Text>
+             <Text style={s.brandSubtitle}>Your daily mental wellness companion</Text>
           </View>
 
-          {/* Form */}
           <View style={s.form}>
             <Text style={s.label}>Email</Text>
             <View style={s.inputContainer}>
@@ -87,24 +88,25 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
               </TouchableOpacity>
             </View>
 
-            <View style={s.forgotRow}>
-              <View style={s.rememberRow}>
-                <Switch 
-                  value={rememberMe} 
-                  onValueChange={setRememberMe}
-                  trackColor={{ false: '#E2E8F0', true: '#161B22' }}
-                  thumbColor="#FFFFFF"
-                  style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                />
-                <Text style={s.rememberText}>Remember me</Text>
-              </View>
+            <Text style={s.label}>Confirm Password</Text>
+            <View style={s.inputContainer}>
+              <LockIcon />
+              <TextInput
+                style={s.input}
+                placeholder="Re-enter your Password"
+                placeholderTextColor="#A0AEC0"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={true}
+                autoCapitalize="none"
+              />
               <TouchableOpacity>
-                <Text style={s.forgotText}>Forgot password ?</Text>
+                <EyeOffIcon />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={s.signInButton} onPress={handleSignIn}>
-              <Text style={s.signInText}>Sign in</Text>
+            <TouchableOpacity style={s.signUpButton} onPress={handleSignUp}>
+              <Text style={s.signUpText}>Sign Up</Text>
             </TouchableOpacity>
 
             <View style={s.orRow}>
@@ -127,9 +129,9 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
           </View>
 
           <View style={s.footer}>
-            <Text style={s.footerText}>Don't have an account ? </Text>
-            <TouchableOpacity onPress={onGoToSignUp}>
-              <Text style={s.footerLink}>Sign up</Text>
+            <Text style={s.footerText}>Already have an account ? </Text>
+            <TouchableOpacity onPress={onGoToLogin}>
+              <Text style={s.footerLink}>Login</Text>
             </TouchableOpacity>
           </View>
 
@@ -147,7 +149,6 @@ const s = StyleSheet.create({
   logoImage: { width: 120, height: 120, marginBottom: 16 },
   brandTitle: { fontSize: 28, fontWeight: '800', color: '#161B22', marginBottom: 8 },
   brandSubtitle: { fontSize: 16, color: '#A0AEC0', marginBottom: 2 },
-  brandDesc: { fontSize: 16, color: '#A0AEC0' },
   
   form: { width: '100%' },
   label: { fontSize: 14, fontWeight: '600', color: '#1E293B', marginBottom: 8 },
@@ -163,20 +164,16 @@ const s = StyleSheet.create({
   },
   input: { flex: 1, marginLeft: 12, fontSize: 14, color: '#1E293B' },
   
-  forgotRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, marginTop: -8 },
-  rememberRow: { flexDirection: 'row', alignItems: 'center' },
-  rememberText: { fontSize: 14, fontWeight: '600', color: '#1E293B', marginLeft: 4 },
-  forgotText: { fontSize: 14, fontWeight: '600', color: '#1E293B' },
-  
-  signInButton: {
+  signUpButton: {
     backgroundColor: '#161B22',
     height: 56,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 32,
+    marginTop: 12,
   },
-  signInText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  signUpText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   
   orRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
   line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
@@ -199,4 +196,4 @@ const s = StyleSheet.create({
   footerLink: { color: '#1E293B', fontSize: 14, fontWeight: '600' },
 });
 
-export default LoginScreen;
+export default SignUpScreen;

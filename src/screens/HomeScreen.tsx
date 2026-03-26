@@ -37,12 +37,12 @@ function getTimeBasedGreeting(): string {
 
 export function HomeScreen(): React.ReactElement {
   const navigation = useNavigation();
-  // const { userName } = useAuth();
+  const { userName } = useAuth();
   const [moodLevel, setMoodLevel] = useState(3);
   const [saySomethingVisible, setSaySomethingVisible] = useState(false);
   const [moodMessage, setMoodMessage] = useState('');
 
-  const displayName = 'Manar';
+  const displayName = userName || 'Friend';
   const greeting = getTimeBasedGreeting();
 
   const closeSaySomething = (): void => {

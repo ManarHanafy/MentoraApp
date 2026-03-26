@@ -1,4 +1,6 @@
-
+export { LoginScreen } from './LoginScreen';
+export { SignUpScreen } from './SignUpScreen';
+export { OnboardingScreen } from './OnboardingScreen';
 export { HomeScreen } from './HomeScreen';
 export { BreathingExerciseScreen } from './BreathingExerciseScreen';
 export { MoodCheckInScreen } from './MoodCheckInScreen';
@@ -6,3 +8,6 @@ export { ChatScreen } from './ChatScreen';
 export { JournalScreen } from './JournalScreen';
 export { DashboardScreen } from './DashboardScreen';
 export { ProfileScreen } from './ProfileScreen';
+export { SettingsScreen } from './SettingsScreen';
+export { EditProfileScreen } from './EditProfileScreen';
+export { ExercisesListScreen } from './ExercisesListScreen';
