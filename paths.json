@@ -1,0 +1,22 @@
+[
+  "/api/Account/profile",
+  "/api/Account/password",
+  "/api/Account",
+  "/api/Auth/login",
+  "/api/Auth/refresh",
+  "/api/Auth/revoke-refresh-token",
+  "/api/Auth/status",
+  "/api/Auth/me",
+  "/api/Crisis/resources",
+  "/api/Crisis/check/{userId}",
+  "/api/Exercises",
+  "/api/Exercises/{exerciseId}",
+  "/api/Journals",
+  "/api/Journals/{journalId}",
+  "/api/Journals/trend",
+  "/api/Journals/parameters",
+  "/api/Statistics/me",
+  "/api/Users/me",
+  "/api/Users",
+  "/api/Users/parameters"
+]

@@ -1,0 +1,8 @@
+content-type,application/json; charset=utf-8
+date,Thu, 09 Apr 2026 20:44:52 GMT
+replit-cluster,janeway
+server,Kestrel
+x-robots-tag,none, noindex, noarchive, nofollow, nositelinkssearchbox, noimageindex, none, noindex, noarchive, nofollow, nositelinkssearchbox, noimageindex
+transfer-encoding,chunked
+
+{"id":"1","email":"newmanar@gmail.com","firstName":"Manar","lastName":"Hanafy","token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZW1haWwiOiJuZXdtYW5hckBnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiTWFuYXIiLCJmYW1pbHlfbmFtZSI6IkhhbmFmeSIsImp0aSI6ImQ1M2Y3MjAzLTZiMWUtNDNjMy05ZmFlLTgyOWMyOTk5YWIyNiIsImV4cCI6MTc3NTc3MTA5MywiaXNzIjoiTWVudGFsSGVhbHRoQXBpIiwiYXVkIjoiTWVudGFsSGVhbHRoQ2xpZW50In0.x11uYkMOgtoqVcLx6BfVXbCbxllor5A_tge4ScCW5ts","expiresIn":3600,"refreshToken":"zdD4re8sO7Kd6O4XhjjTb7H+XV+0BJoMZGNvaN9i0BueZ20Z2/29ZN6pCE7hVbxA3I4CnF1pK++T+532eAwHYQ==","refreshTokenExpiration":"2026-04-23T20:44:53.5551135Z"}

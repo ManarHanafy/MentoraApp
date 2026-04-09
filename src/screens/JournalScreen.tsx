@@ -9,11 +9,37 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, HIT_SLOP } from '../theme';
 import { Card } from '../components';
 import { FilterIcon, CloudIcon, CloudOutlineIcon, DocumentIcon, MicrophoneIcon, LockIcon } from '../components/Icons';
 import { styles } from './JournalScreen.style';
+
+let testTokenCache = '';
+
+const getApiToken = async (): Promise<string> => {
+  if (testTokenCache) return testTokenCache;
+  try {
+    // Authenticate with a test user we created to get a valid token
+    const res = await fetch('https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev/api/Auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      testTokenCache = data.token;
+      return testTokenCache;
+    }
+  } catch (e) {
+    console.error('Failed to auto-login for token', e);
+  }
+  return '';
+};
 
 const FILTER_OPTIONS = [
   { id: 'all', label: 'All', IconComponent: CloudOutlineIcon },
@@ -27,44 +53,12 @@ export interface JournalEntry {
   id: string;
   title: string;
   preview: string;
+  fullContent?: string;
   date: string;
   tags: string[];
   type: 'text' | 'record';
   locked?: boolean;
 }
-
-const SAMPLE_ENTRIES: JournalEntry[] = [
-  {
-    id: '1',
-    title: 'A peaceful morning',
-    preview:
-      'Woke up feeling refreshed. The morning meditation really helped set a positive tone for the day.',
-    date: 'Dec 19, 2025, 8:30 AM',
-    tags: ['Morning', 'Meditation'],
-    type: 'record',
-    locked: false,
-  },
-  {
-    id: '2',
-    title: 'Thoughts on work-life balance',
-    preview:
-      'Struggling to switch off after work. Need to set clearer boundaries and stick to a wind-down routine.',
-    date: 'Dec 18, 2025, 9:15 PM',
-    tags: ['Work', 'Reflection'],
-    type: 'text',
-    locked: false,
-  },
-  {
-    id: '3',
-    title: 'My hidden thoughts',
-    preview: 'This is a private entry that should only appear in the Locked filter.',
-    date: 'Dec 17, 2025, 7:00 PM',
-    tags: ['Private'],
-    type: 'text',
-    locked: true,
-  },
-
-];
 
 function matchSearch(entry: JournalEntry, query: string): boolean {
   if (!query.trim()) return true;
@@ -85,11 +79,27 @@ export function JournalScreen(): React.ReactElement {
   const [newContent, setNewContent] = useState('');
   const [lockedChecked, setLockedChecked] = useState(false);
   const [lockedConfirmed, setLockedConfirmed] = useState(false);
-  const [entries, setEntries] = useState<JournalEntry[]>(SAMPLE_ENTRIES);
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
 
-  // Force reset entries when component mounts to ensure verified data is shown
-  React.useEffect(() => {
-    setEntries(SAMPLE_ENTRIES);
+  useEffect(() => {
+    AsyncStorage.getItem('@mentora_journal_entries').then(stored => {
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as JournalEntry[];
+          // Auto-delete old entries that do not have fullContent
+          const validEntries = parsed.filter(e => e.fullContent !== undefined);
+          setEntries(validEntries);
+          
+          if (validEntries.length !== parsed.length) {
+            AsyncStorage.setItem('@mentora_journal_entries', JSON.stringify(validEntries));
+          }
+        } catch (e) {
+          console.error('Error parsing stored journals', e);
+        }
+      }
+    }).catch(e => console.error('Failed to load journals', e));
   }, []);
 
   useEffect(() => {
@@ -146,33 +156,112 @@ export function JournalScreen(): React.ReactElement {
     setMentoraModalVisible(false);
   };
 
-  const saveEntry = (): void => {
-    if (newTitle.trim() || newContent.trim()) {
-      setEntries((prev) => [
-        {
-          id: Date.now().toString(),
-          title: newTitle.trim() || 'Untitled',
-          preview:
-            newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
-          date: new Date().toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          }),
-          tags: [],
-          type: 'text',
-          locked: lockedChecked,
-        },
-        ...prev,
-      ]);
+  const saveEntry = async (): Promise<void> => {
+    if (!newTitle.trim() && !newContent.trim()) {
+      closeWrite();
+      return;
     }
-    closeWrite();
+
+    setIsSaving(true);
+    try {
+      const payloadContent = newContent.trim() || newTitle.trim();
+      
+      // Get the real token from the API
+      const token = await getApiToken();
+
+      const response = await fetch('https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev/api/Journals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ content: payloadContent }),
+      });
+
+      let tags: string[] = [];
+      if (response.ok) {
+        const data = await response.json();
+        const apiTags = data.tags || data.Tags;
+        if (Array.isArray(apiTags)) {
+          tags = apiTags;
+        } else if (typeof apiTags === 'string') {
+          try {
+            const parsed = JSON.parse(apiTags);
+            if (Array.isArray(parsed)) {
+              tags = parsed;
+            } else {
+              tags = apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+            }
+          } catch (e) {
+            tags = apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+          }
+        }
+      } else {
+        Alert.alert(
+          'API Error',
+          `The API returned ${response.status}. It likely requires a Bearer Token for Auth. Tags will not be generated.`
+        );
+      }
+
+      setEntries((prev) => {
+        const updated: JournalEntry[] = [
+          {
+            id: Date.now().toString(),
+            title: newTitle.trim() || 'Untitled',
+            preview:
+              newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
+            fullContent: newContent.trim(),
+            date: new Date().toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            }),
+            tags,
+            type: 'text',
+            locked: lockedChecked,
+          },
+          ...prev,
+        ];
+        AsyncStorage.setItem('@mentora_journal_entries', JSON.stringify(updated)).catch(console.error);
+        return updated;
+      });
+    } catch (error) {
+      console.error('Failed to save entry to API:', error);
+      setEntries((prev) => {
+        const updated: JournalEntry[] = [
+          {
+            id: Date.now().toString(),
+            title: newTitle.trim() || 'Untitled',
+            preview:
+              newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
+            date: new Date().toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            }),
+            tags: [],
+            type: 'text',
+            locked: lockedChecked,
+          },
+          ...prev,
+        ];
+        AsyncStorage.setItem('@mentora_journal_entries', JSON.stringify(updated)).catch(console.error);
+        return updated;
+      });
+    } finally {
+      setIsSaving(false);
+      closeWrite();
+    }
   };
 
   const renderEntry = ({ item }: { item: JournalEntry }): React.ReactElement => (
-    <Card style={styles.entryCard} accessibilityRole="button" accessibilityLabel={`Entry: ${item.title}`}>
+    <TouchableOpacity onPress={() => setSelectedEntry(item)} activeOpacity={0.9}>
+      <Card style={styles.entryCard} accessibilityRole="button" accessibilityLabel={`Entry: ${item.title}`}>
       <View style={styles.entryCardInner}>
         {(item.type === 'record' || item.locked) && (
           <View style={styles.entryBadge}>
@@ -203,6 +292,7 @@ export function JournalScreen(): React.ReactElement {
         </View>
       </View>
     </Card>
+    </TouchableOpacity>
   );
 
   return (
@@ -349,8 +439,12 @@ export function JournalScreen(): React.ReactElement {
                     <Text style={styles.lockedLabel}>Locked</Text>
                     <Text style={styles.lockedIcon}>🔒</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.saveEntryButton} onPress={saveEntry} activeOpacity={0.9}>
-                    <Text style={styles.saveEntryButtonText}>Save Entry</Text>
+                  <TouchableOpacity style={styles.saveEntryButton} onPress={saveEntry} activeOpacity={0.9} disabled={isSaving}>
+                    {isSaving ? (
+                      <ActivityIndicator color={colors.white} />
+                    ) : (
+                      <Text style={styles.saveEntryButtonText}>Save Entry</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </TouchableWithoutFeedback>
@@ -385,6 +479,37 @@ export function JournalScreen(): React.ReactElement {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* View Entry Modal */}
+      <Modal
+        visible={!!selectedEntry}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSelectedEntry(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setSelectedEntry(null)}>
+          <View style={styles.writeOverlay}>
+            <TouchableWithoutFeedback onPress={() => { }}>
+              <View style={[styles.writeCard, { maxHeight: '80%' }]}>
+                <View style={[styles.writeCardHeader, { justifyContent: 'space-between', flexDirection: 'row', alignItems: 'center' }]}>
+                  <Text style={{ fontSize: 18, color: colors.white, fontWeight: 'bold' }}>Entry Details</Text>
+                  <TouchableOpacity onPress={() => setSelectedEntry(null)} style={styles.writeCloseBtn} hitSlop={HIT_SLOP}>
+                    <Text style={styles.writeCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.writeInputTitle, { marginTop: 16, marginBottom: 8 }]}>
+                  {selectedEntry?.title}
+                </Text>
+                <ScrollView contentContainerStyle={{ paddingBottom: 24 }} style={{ marginVertical: 8 }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 16, lineHeight: 28 }}>
+                    {selectedEntry?.fullContent || selectedEntry?.preview}
+                  </Text>
+                </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View >
   );
