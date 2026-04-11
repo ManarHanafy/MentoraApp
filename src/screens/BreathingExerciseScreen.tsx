@@ -141,7 +141,7 @@ const s = StyleSheet.create({
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
     paddingBottom: 60, 
-    paddingTop: 20,
+    paddingTop: 8,
   },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16 },
   backBtn: { padding: 8, marginLeft: -8 },

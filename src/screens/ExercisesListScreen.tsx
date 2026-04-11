@@ -142,7 +142,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 12,
-    paddingTop:50,
+    paddingTop:22,
   },
   backBtn: { marginRight: 12, padding: 4 },
   searchContainer: {

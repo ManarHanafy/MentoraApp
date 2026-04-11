@@ -7,7 +7,7 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-   marginTop:50,
+   marginTop:12,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.pageBottom,

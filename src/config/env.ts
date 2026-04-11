@@ -1,0 +1,1 @@
+export const API_BASE_URL = 'https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev';

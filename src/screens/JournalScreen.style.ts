@@ -8,7 +8,7 @@ export const styles = StyleSheet.create({
   },
   // --- Top: Search + Filter ---
   topBar: {
-    marginTop:50,
+    marginTop:12,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,

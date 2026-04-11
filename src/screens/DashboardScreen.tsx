@@ -312,7 +312,7 @@ const s = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 22,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderColor: '#F1F5F9',
