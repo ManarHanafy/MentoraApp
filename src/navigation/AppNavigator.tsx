@@ -11,7 +11,6 @@ import {
   SignUpScreen,
   OnboardingScreen,
   HomeScreen,
-  BreathingExerciseScreen,
   MoodCheckInScreen,
   ChatScreen,
   JournalScreen,
@@ -19,7 +18,7 @@ import {
   ProfileScreen,
   SettingsScreen,
   EditProfileScreen,
-  ExercisesListScreen,
+  ExercisesScreen,
 } from '../screens';
 import { HomeIcon, ChatIcon, JournalIcon, InsightsIcon, ProfileIcon } from '../components/Icons';
 
@@ -130,9 +129,8 @@ export function AppNavigator(): React.ReactElement {
     content = (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Main" component={MainTabs} />
-        <Stack.Screen name="BreathingExercise" component={BreathingExerciseScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Exercises" component={ExercisesScreen} options={{ headerShown: false }} />
         <Stack.Screen name="MoodCheckIn" component={MoodCheckInScreen} options={{ title: 'Mood check-in' }} />
-        <Stack.Screen name="ExercisesList" component={ExercisesListScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     );
   }

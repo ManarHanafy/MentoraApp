@@ -18,18 +18,46 @@ import { colors, HIT_SLOP } from '../theme';
 import { Card } from '../components';
 import { FilterIcon, CloudIcon, CloudOutlineIcon, DocumentIcon, MicrophoneIcon, LockIcon } from '../components/Icons';
 import { styles } from './JournalScreen.style';
+import { API_BASE_URL } from '../config/env';
+import { ExerciseService } from '../services/exerciseService';
 
 let testTokenCache = '';
 
 const getApiToken = async (): Promise<string> => {
   if (testTokenCache) return testTokenCache;
   try {
-    // Authenticate with a test user we created to get a valid token
-    const res = await fetch('https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev/api/Auth/login', {
+    const apiUrl = API_BASE_URL;
+    
+    // First, TRY TO LOGIN
+    let res = await fetch(`${apiUrl}/Auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
     });
+
+    // If login fails (user doesn't exist on this local server), TRY TO REGISTER THEM
+    if (!res.ok) {
+       console.log('Login failed, attempting auto-registration...');
+       await fetch(`${apiUrl}/Users`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ 
+           username: 'ManarH',
+           firstName: 'Manar', 
+           lastName: 'Hanafy', 
+           email: 'newmanar@gmail.com', 
+           password: 'Password123!' 
+         })
+       });
+       
+       // Try login one more time after registering
+       res = await fetch(`${apiUrl}/Auth/login`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
+       });
+    }
+
     if (res.ok) {
       const data = await res.json();
       testTokenCache = data.token;
@@ -169,7 +197,10 @@ export function JournalScreen(): React.ReactElement {
       // Get the real token from the API
       const token = await getApiToken();
 
-      const response = await fetch('https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev/api/Journals', {
+      const apiUrl = API_BASE_URL;
+      console.log('Saving entry to:', `${apiUrl}/Journals`);
+
+      const response = await fetch(`${apiUrl}/Journals`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -196,7 +227,101 @@ export function JournalScreen(): React.ReactElement {
           } catch (e) {
             tags = apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
           }
+        } // <-- Added missing closing brace
+        
+        // === DEBUG: Log full API response to see exact fields ===
+        console.log('=== JOURNAL API FULL RESPONSE ===');
+        console.log(JSON.stringify(data, null, 2));
+
+        // === UNIQUE LIBRARY MAPPING ===
+        // We map the suggested exercises from the backend to our library exercises
+        const aiSuggested = data.suggestedExercises || data.SuggestedExercises || [];
+        
+        // --- Gibberish / AI Validation ---
+        // If the AI couldn't extract any tags, it means the text was random or not meaningful.
+        if (tags.length === 0) {
+            // Delete the invalid entry from the backend to keep history clean
+            const entryId = data.id || data.Id;
+            if (entryId && token) {
+                fetch(`${apiUrl}/Journals/${entryId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).catch(e => console.log('Silently failed to delete gibberish entry', e));
+            }
+
+            Alert.alert(
+              'Entry Not Understood',
+              'Mentora couldn’t understand your entry. Please write clear and meaningful sentences so we can help you better.'
+            );
+            setIsSaving(false);
+            return; // Prevent saving the journal entry locally
         }
+        
+        if (aiSuggested && aiSuggested.length > 0) {
+            const allExercises = await ExerciseService.getAllExercises();
+            
+            console.log('--- Matching AI Suggestions ---');
+            console.log('AI Suggestions count:', aiSuggested.length);
+            console.log('Database exercises count:', allExercises.length);
+
+            const enrichedSuggestions = aiSuggested.map((aiEx: any, idx: number) => {
+                const exerciseId = aiEx.exerciseId || aiEx.ExerciseId;
+                const code = aiEx.exerciseCode || aiEx.ExerciseCode || '';
+                
+                // 1. Try to find the real exercise in our database library by ID or Code
+                const dbMatch = allExercises.find(ex => 
+                    (exerciseId && ex.id === exerciseId) || 
+                    (code && ex.exerciseCode === code)
+                );
+                
+                // 2. Get beautiful details from our library map using the code
+                const libraryDetails = ExerciseService.getExerciseDetailsByCode(code || (dbMatch as any)?.exerciseCode);
+                
+                if (dbMatch) {
+                   console.log(`Matched exercise: ${dbMatch.name} (${code || exerciseId})`);
+                   // If the database name is just the code, use our library name instead
+                   const isNameCode = dbMatch.name === code || dbMatch.name?.includes('_');
+                   
+                   return {
+                      ...dbMatch,
+                      name: (isNameCode && libraryDetails.name) ? libraryDetails.name : dbMatch.name,
+                      description: libraryDetails.description || dbMatch.description,
+                      exerciseType: libraryDetails.exerciseType || dbMatch.exerciseType,
+                      durationMinutes: libraryDetails.durationMinutes || dbMatch.durationMinutes,
+                      instructions: libraryDetails.instructions || dbMatch.instructions,
+                      exerciseCode: code || dbMatch.exerciseCode
+                   };
+                }
+
+                console.log(`No match found for: ${code || exerciseId}. Using fallback library.`);
+                // 3. Fallback to our hardcoded map if not found in DB at all
+                return {
+                    id: exerciseId || code || `ai_${Date.now()}_${idx}`,
+                    name: libraryDetails.name || 'AI Suggested Exercise',
+                    description: libraryDetails.description || `Recommended for ${aiEx.parameter || 'wellness'}`,
+                    exerciseType: libraryDetails.exerciseType || 'AI Suggestion',
+                    durationMinutes: libraryDetails.durationMinutes || 5,
+                    difficulty: 'Medium',
+                    instructions: libraryDetails.instructions || 'Follow the on-screen prompts.',
+                    isActive: true,
+                    exerciseCode: code
+                };
+            });
+            
+            // Keep only unique exercises
+            const uniqueMap = new Map();
+            enrichedSuggestions.forEach((ex: any) => {
+              const key = ex.id || ex.name;
+              if (!uniqueMap.has(key)) {
+                uniqueMap.set(key, ex);
+              }
+            });
+            const uniqueExercises = Array.from(uniqueMap.values());
+            
+            console.log('=== DISPLAYING UNIQUE AI EXERCISES ===', uniqueExercises.length);
+            await ExerciseService.saveSuggestedExercises(uniqueExercises);
+        }
+        
       } else {
         Alert.alert(
           'API Error',

@@ -1,12 +1,9 @@
 const https = require('https');
-https.get('https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev/swagger/v1/swagger.json', (res) => {
+https.get('https://5a5e554c-0a41-4ae8-a007-2c01e6a3e53a-00-2qsja5cwc15oo.picard.replit.dev/api/Exercises/1', (res) => {
   let d = '';
   res.on('data', c => d+=c);
   res.on('end', () => {
-    try {
-      const j = JSON.parse(d);
-      console.log("PATHS:");
-      console.log(Object.keys(j.paths));
-    } catch(e) { console.log(e); }
+    console.log("Status:", res.statusCode);
+    console.log(d);
   });
 });

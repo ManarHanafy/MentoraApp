@@ -1,1 +1,2 @@
-export const API_BASE_URL = 'https://7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev';
+// @ts-ignore
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL) || 'https://5a5e554c-0a41-4ae8-a007-2c01e6a3e53a-00-2qsja5cwc15oo.picard.replit.dev/api';

@@ -2,11 +2,48 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
 import { colors, typography } from '../theme';
 import { ChartTrendIcon, ClipboardIcon, LightningIcon, TargetIcon } from '../components/Icons';
+import { CurrentExerciseCard } from '../components/CurrentExerciseCard';
+import { Exercise, ExerciseService } from '../services/exerciseService';
+import { useFocusEffect } from '@react-navigation/native';
 
 type TabType = 'Overview' | 'Trends' | 'Triggers' | 'Goals';
 
 export function DashboardScreen(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+  const [suggestedExercise, setSuggestedExercise] = useState<Exercise | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSuggestedExercise();
+    }, [])
+  );
+
+  const loadSuggestedExercise = async () => {
+    setLoading(true);
+    try {
+      // First, check if there's an AI suggested exercise from Journaling
+      const suggested = await ExerciseService.getSuggestedExercises();
+      if (suggested && suggested.length > 0) {
+        setSuggestedExercise(suggested[0]);
+        return;
+      }
+
+      // Fallback: get all exercises and pick the first one
+      const all = await ExerciseService.getAllExercises();
+      if (all.length > 0) {
+        setSuggestedExercise(all[0]);
+      }
+    } catch (e) {
+      console.error('Dashboard load error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onExerciseComplete = () => {
+    setSuggestedExercise(null); // يختفي بعد الإكمال
+  };
 
   const renderTabs = () => {
     const tabs = [
@@ -38,6 +75,17 @@ export function DashboardScreen(): React.ReactElement {
 
   const renderOverview = () => (
     <ScrollView style={s.content} showsVerticalScrollIndicator={false}>
+      {/* عرض التمرين المقترح في أعلى القائمة */}
+      {suggestedExercise && (
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[s.largeCardTitle, { marginBottom: 16 }]}>Recommended For You</Text>
+          <CurrentExerciseCard 
+            exercise={suggestedExercise} 
+            onComplete={onExerciseComplete} 
+          />
+        </View>
+      )}
+
       <View style={s.row}>
         <View style={s.card}>
           <Text style={s.cardTitle}>Average Mood</Text>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,25 +8,21 @@ import {
   TextInput,
   TouchableWithoutFeedback,
   Dimensions,
+  FlatList,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components';
 import { BellIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
-import { colors } from '../theme';
+import { colors, typography } from '../theme';
 import { styles } from './HomeScreen.style';
+import { ExerciseService } from '../services/exerciseService';
 
 // Sad -> Happy
 const MOOD_EMOJIS = ['😔', '😐', '🙂', '😊', '🤩'];
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRACK_PADDING = 24;
 const TRACK_WIDTH = SCREEN_WIDTH - TRACK_PADDING * 2 - 32;
-
-const RECENT_ACTIVITIES = [
-  { id: '1', title: 'Work Stress', meta: '08:00 AM • Journal', icon: '📄', iconBg: 'orange' },
-  { id: '2', title: 'Breathing Exercise', meta: 'Yesterday • Mindfulness', icon: '🧘', iconBg: 'orange' },
-  { id: '3', title: 'Anxiety Inquiry', meta: '15 Jan 26 • Chat', icon: '💬', iconBg: 'blue' },
-];
 
 function getTimeBasedGreeting(): string {
   const h = new Date().getHours();
@@ -37,13 +33,35 @@ function getTimeBasedGreeting(): string {
 
 export function HomeScreen(): React.ReactElement {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const { userName } = useAuth();
   const [moodLevel, setMoodLevel] = useState(3);
   const [saySomethingVisible, setSaySomethingVisible] = useState(false);
   const [moodMessage, setMoodMessage] = useState('');
 
+  // Queue State
+  const [pendingQueue, setPendingQueue] = useState<any[]>([]);
+  const [recentHistory, setRecentHistory] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const displayName = userName || 'Friend';
   const greeting = getTimeBasedGreeting();
+
+  useEffect(() => {
+    if (isFocused) {
+       loadData();
+    }
+  }, [isFocused]);
+
+  const loadData = async () => {
+    try {
+      const completed = await ExerciseService.getCompletedExercises();
+      setRecentHistory(completed.reverse());
+      
+      const suggestedRes = await ExerciseService.getSuggestedExercises();
+      setPendingQueue(suggestedRes || []);
+    } catch(e) {}
+  };
 
   const closeSaySomething = (): void => {
     setSaySomethingVisible(false);
@@ -51,6 +69,7 @@ export function HomeScreen(): React.ReactElement {
   };
 
   const trackMood = (): void => {
+    navigation.navigate('Journal' as never);
     closeSaySomething();
   };
 
@@ -66,12 +85,53 @@ export function HomeScreen(): React.ReactElement {
     >
       <View style={styles.topBar}>
         <Text style={styles.greeting}>{greeting}, {displayName}</Text>
-        <TouchableOpacity style={styles.bellBtn} accessibilityLabel="Notifications">
+        <TouchableOpacity style={styles.bellBtn} onPress={() => setShowNotifications(true)} accessibilityLabel="Notifications">
           <BellIcon color={colors.textPrimary} size={24} />
+          {pendingQueue.length > 0 && (
+              <View style={{position: 'absolute', top: -2, right: -2, backgroundColor: 'red', borderRadius: 10, width: 20, height: 20, alignItems:'center', justifyContent:'center'}}>
+                 <Text style={{color: 'white', fontSize: 12, fontWeight: 'bold'}}>{pendingQueue.length}</Text>
+              </View>
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Daily Quote */}
+      {/* --- Notifications Modal --- */}
+      <Modal visible={showNotifications} animationType="slide" transparent={true}>
+         <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { maxHeight: '80%', padding: 20 }]}>
+               <View style={styles.modalCardHeader}>
+                  <Text style={styles.modalCardTitle}>Pending Exercises ({pendingQueue.length})</Text>
+                  <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowNotifications(false)}>
+                     <Text style={styles.modalCloseText}>✕</Text>
+                  </TouchableOpacity>
+               </View>
+               {pendingQueue.length === 0 ? (
+                  <Text style={{color: colors.textMuted, textAlign: 'center', marginTop: 20}}>No pending exercises. You're all caught up!</Text>
+               ) : (
+                  <FlatList 
+                     data={pendingQueue}
+                     keyExtractor={(item) => (item.queueId || item.id) + Math.random().toString()}
+                     renderItem={({item}) => (
+                        <TouchableOpacity 
+                           style={{paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#EEE', flexDirection: 'row', alignItems: 'center'}}
+                           onPress={() => {
+                              setShowNotifications(false);
+                              (navigation as any).navigate('Exercises', { openSuggested: true, exerciseToStart: item });
+                           }}
+                        >
+                           <Text style={{fontSize: 24, marginRight: 15}}>🧠</Text>
+                           <View style={{flex: 1}}>
+                              <Text style={{fontWeight: 'bold', fontSize: 16, color: '#333'}}>{item.name}</Text>
+                              <Text style={{color: '#666', fontSize: 12}} numberOfLines={1}>{item.description}</Text>
+                           </View>
+                           <ArrowRightIcon color="#999" size={16} />
+                        </TouchableOpacity>
+                     )}
+                  />
+               )}
+            </View>
+         </View>
+      </Modal>
 
       <Card style={styles.moodCard}>
         <Text style={styles.moodTitle}>How are you feeling?</Text>
@@ -114,31 +174,67 @@ export function HomeScreen(): React.ReactElement {
           </View>
           <Text style={styles.recTitle}>Recommended for you</Text>
         </View>
-        <Text style={styles.recDesc}>Try a 3-minute breathing exercise to calm your mind.</Text>
+        
+        {pendingQueue.length > 0 ? (
+          <>
+             <Text style={[typography.h3, { color: colors.white, marginTop: 4, marginBottom: 8, fontWeight: 'bold' }]}>
+               {pendingQueue[0].name}
+             </Text>
+             {pendingQueue.length > 1 && (
+               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 16 }}>
+                 +{pendingQueue.length - 1} more waiting for you
+               </Text>
+             )}
+          </>
+        ) : (
+          <Text style={styles.recDesc}>
+            Explore our exercise library and track your daily progress.
+          </Text>
+        )}
+
         <TouchableOpacity
           style={styles.startExerciseBtn}
-          onPress={() => navigation.navigate('BreathingExercise' as never)}
+          onPress={() => {
+            if (pendingQueue.length > 0) {
+               (navigation as any).navigate('Exercises', { openSuggested: true });
+            } else {
+               (navigation as any).navigate('Exercises', { openSuggested: false });
+            }
+          }}
           activeOpacity={0.9}
           accessibilityLabel="Start exercise"
         >
-          <Text style={styles.startExerciseText}>Start exercise</Text>
+          <Text style={styles.startExerciseText}>
+            {pendingQueue.length > 0 ? `Start ${pendingQueue[0].name.slice(0, 15)}...` : 'See completed exercises'}
+          </Text>
           <ArrowRightIcon color={colors.white} size={16} />
         </TouchableOpacity>
       </View>
 
       <Text style={styles.sectionTitle}>Recent Activity</Text>
-      {RECENT_ACTIVITIES.map((item) => (
-        <TouchableOpacity key={item.id} style={styles.activityCard} activeOpacity={0.8}>
-          <View style={[styles.activityIconWrap, item.iconBg === 'blue' ? styles.activityIconWrapBlue : styles.activityIconWrapOrange]}>
-            <Text style={styles.activityIcon}>{item.icon}</Text>
+      {recentHistory.length > 0 ? (
+          recentHistory.slice(0, 5).map((ex) => (
+            <TouchableOpacity 
+              key={ex.id + Math.random().toString()} 
+              style={styles.activityCard} 
+              activeOpacity={0.8}
+              onPress={() => (navigation as any).navigate('Exercises', { openSuggested: false })}
+            >
+              <View style={[styles.activityIconWrap, {backgroundColor: '#FED7AA'}]}>
+                <Text style={styles.activityIcon}>✅</Text>
+              </View>
+              <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>{ex.name}</Text>
+                <Text style={styles.activityMeta}>{ex.durationMinutes || 5} min • {ex.exerciseType || 'Exercise'}</Text>
+              </View>
+              <ArrowRightIcon color={colors.textMuted} size={18} />
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.activityCard}>
+            <Text style={{ color: colors.textMuted, padding: 10 }}>No recent activities yet.</Text>
           </View>
-          <View style={styles.activityContent}>
-            <Text style={styles.activityTitle}>{item.title}</Text>
-            <Text style={styles.activityMeta}>{item.meta}</Text>
-          </View>
-          <ArrowRightIcon color={colors.textMuted} size={18} />
-        </TouchableOpacity>
-      ))}
+      )}
 
       <Modal visible={saySomethingVisible} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={closeSaySomething}>
