@@ -207,7 +207,7 @@ export function JournalScreen(): React.ReactElement {
           'Accept': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ content: payloadContent }),
+        body: JSON.stringify({ journal_text: payloadContent }),
       });
 
       let tags: string[] = [];
@@ -227,7 +227,7 @@ export function JournalScreen(): React.ReactElement {
           } catch (e) {
             tags = apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
           }
-        } // <-- Added missing closing brace
+        }
         
         // === DEBUG: Log full API response to see exact fields ===
         console.log('=== JOURNAL API FULL RESPONSE ===');
@@ -235,7 +235,7 @@ export function JournalScreen(): React.ReactElement {
 
         // === UNIQUE LIBRARY MAPPING ===
         // We map the suggested exercises from the backend to our library exercises
-        const aiSuggested = data.suggestedExercises || data.SuggestedExercises || [];
+        const aiSuggested = data.suggested_exercises || data.suggestedExercises || data.SuggestedExercises || [];
         
         // --- Gibberish / AI Validation ---
         // If the AI couldn't extract any tags, it means the text was random or not meaningful.
@@ -265,8 +265,8 @@ export function JournalScreen(): React.ReactElement {
             console.log('Database exercises count:', allExercises.length);
 
             const enrichedSuggestions = aiSuggested.map((aiEx: any, idx: number) => {
-                const exerciseId = aiEx.exerciseId || aiEx.ExerciseId;
-                const code = aiEx.exerciseCode || aiEx.ExerciseCode || '';
+                const exerciseId = aiEx.id || aiEx.exerciseId || aiEx.ExerciseId;
+                const code = aiEx.exerciseCode || aiEx.ExerciseCode || aiEx.id || '';
                 
                 // 1. Try to find the real exercise in our database library by ID or Code
                 const dbMatch = allExercises.find(ex => 

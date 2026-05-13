@@ -3,7 +3,7 @@ const https = require('https');
 const loginData = JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' });
 
 const loginReq = https.request({
-  hostname: '5a5e554c-0a41-4ae8-a007-2c01e6a3e53a-00-2qsja5cwc15oo.picard.replit.dev',
+  hostname: '8b0f16e8-d639-4ba4-bc8c-94c3d953bee8-00-eztujy09lbr3.worf.replit.dev',
   path: '/api/Auth/login',
   method: 'POST',
   headers: {
@@ -19,9 +19,9 @@ const loginReq = https.request({
     
     if (!token) return;
 
-    const jData = JSON.stringify({ content: "asdflkajsdhf alksdfh asdf lkasjdf asdf" });
+    const jData = JSON.stringify({ journal_text: "asdflkajsdhf alksdfh asdf lkasjdf asdf" });
     const jReq = https.request({
-      hostname: '5a5e554c-0a41-4ae8-a007-2c01e6a3e53a-00-2qsja5cwc15oo.picard.replit.dev',
+      hostname: '8b0f16e8-d639-4ba4-bc8c-94c3d953bee8-00-eztujy09lbr3.worf.replit.dev',
       path: '/api/Journals',
       method: 'POST',
       headers: {

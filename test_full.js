@@ -1,6 +1,6 @@
 const https = require('https');
 
-const API_BASE_URL = '7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev';
+const API_BASE_URL = '8b0f16e8-d639-4ba4-bc8c-94c3d953bee8-00-eztujy09lbr3.worf.replit.dev';
 
 function request(path, method, body, token = null) {
   return new Promise((resolve, reject) => {
@@ -54,7 +54,7 @@ async function run() {
 
     console.log('\n--- Step 2: Post Journal ---');
     const journalRes = await request('/api/Journals', 'POST', {
-      content: 'Testing full flow from node script'
+      journal_text: 'Testing full flow from node script'
     }, token);
     console.log('Journal Status:', journalRes.statusCode);
     console.log('Journal Body:', journalRes.body);

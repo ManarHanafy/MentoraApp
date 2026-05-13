@@ -4,7 +4,7 @@ function request(path, method, body, token = null) {
   return new Promise((resolve, reject) => {
     const data = body ? JSON.stringify(body) : '';
     const options = {
-      hostname: '7a062fd9-ca89-4384-9cc3-2d5708ee1ab9-00-1mhj59pmn7qzz.janeway.replit.dev',
+      hostname: '8b0f16e8-d639-4ba4-bc8c-94c3d953bee8-00-eztujy09lbr3.worf.replit.dev',
       port: 443,
       path: path,
       method: method,
@@ -46,15 +46,13 @@ async function run() {
 
     // Step 2: Post a Journal entry
     console.log('\n--- Posting journal entry... ---');
-    const journalRes = await request('/api/Journals', 'POST', {
-      content: 'I feel very stressed and anxious about my work deadlines today'
-    }, token);
+    const journalResponse = await request('/api/Journals', 'POST', { journal_text: 'I feel very anxious about my upcoming exam tomorrow' }, token);
     
-    console.log('Journal Status:', journalRes.statusCode);
+    console.log('Journal Status:', journalResponse.statusCode);
     console.log('\n=== FULL JOURNAL API RESPONSE ===');
     
     try {
-      const parsed = JSON.parse(journalRes.body);
+      const parsed = JSON.parse(journalResponse.body);
       console.log(JSON.stringify(parsed, null, 2));
       
       // List all top-level keys
@@ -69,7 +67,7 @@ async function run() {
         console.log(`  "${key}" (${type}): ${preview}`);
       }
     } catch(e) {
-      console.log('RAW (not JSON):', journalRes.body);
+      console.log('RAW (not JSON):', journalResponse.body);
     }
     
     console.log('\n=================================');

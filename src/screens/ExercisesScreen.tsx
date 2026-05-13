@@ -16,41 +16,41 @@ const PlayIcon = ({ color = '#161B22' }) => <Text style={{ fontSize: 16, color }
 const CATEGORIES = ['All', 'CBT', 'Breathing', 'Sleep', 'Behavioral', 'Relaxation', 'Social', 'Safety', 'Mindfulness'];
 
 const TIPS = {
-  All: { 
-    title: '🌿 Exercise Benefits', 
-    points: ['Regular exercise improves mood', 'Reduces daily stress levels', 'Enhances mental clarity & focus'] 
+  All: {
+    title: '🌿 Exercise Benefits',
+    points: ['Regular exercise improves mood', 'Reduces daily stress levels', 'Enhances mental clarity & focus']
   },
-  CBT: { 
-    title: '🧠 CBT Techniques', 
-    points: ['Identify negative thought patterns', 'Challenge your core beliefs', 'Practice cognitive restructuring'] 
+  CBT: {
+    title: '🧠 CBT Techniques',
+    points: ['Identify negative thought patterns', 'Challenge your core beliefs', 'Practice cognitive restructuring']
   },
-  Breathing: { 
-    title: '💨 Breathing Tips', 
-    points: ['Focus on slow, deep inhales', 'Exhale longer than you inhale', 'Relax your shoulders and jaw'] 
+  Breathing: {
+    title: '💨 Breathing Tips',
+    points: ['Focus on slow, deep inhales', 'Exhale longer than you inhale', 'Relax your shoulders and jaw']
   },
-  Sleep: { 
-    title: '😴 Sleep Hygiene', 
-    points: ['Maintain a consistent schedule', 'Limit screen time before bed', 'Create a cool, dark environment'] 
+  Sleep: {
+    title: '😴 Sleep Hygiene',
+    points: ['Maintain a consistent schedule', 'Limit screen time before bed', 'Create a cool, dark environment']
   },
-  Behavioral: { 
-    title: '🎯 Activity Focus', 
-    points: ['Set small, achievable goals', 'Schedule rewarding activities', 'Track your daily energy levels'] 
+  Behavioral: {
+    title: '🎯 Activity Focus',
+    points: ['Set small, achievable goals', 'Schedule rewarding activities', 'Track your daily energy levels']
   },
-  Relaxation: { 
-    title: '🌊 Deep Relaxation', 
-    points: ['Try progressive muscle relaxation', 'Visualize a peaceful place', 'Let go of physical tension'] 
+  Relaxation: {
+    title: '🌊 Deep Relaxation',
+    points: ['Try progressive muscle relaxation', 'Visualize a peaceful place', 'Let go of physical tension']
   },
-  Social: { 
-    title: '🤝 Connection', 
-    points: ['Reach out to a trusted friend', 'Share your feelings openly', 'Engage in community activities'] 
+  Social: {
+    title: '🤝 Connection',
+    points: ['Reach out to a trusted friend', 'Share your feelings openly', 'Engage in community activities']
   },
-  Safety: { 
-    title: '🛡️ Safety Planning', 
-    points: ['Identify your safe triggers', 'Keep support contacts ready', 'Follow your personalized plan'] 
+  Safety: {
+    title: '🛡️ Safety Planning',
+    points: ['Identify your safe triggers', 'Keep support contacts ready', 'Follow your personalized plan']
   },
-  Mindfulness: { 
-    title: '🧘 Mindfulness Guide', 
-    points: ['Stay present in the moment', 'Observe without judgment', 'Focus on your bodily sensations'] 
+  Mindfulness: {
+    title: '🧘 Mindfulness Guide',
+    points: ['Stay present in the moment', 'Observe without judgment', 'Focus on your bodily sensations']
   }
 };
 
@@ -123,16 +123,16 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       const pendingQueue = suggested || [];
 
       if (route?.params?.openSuggested === true && !showHistoryOnly) {
-         // ONLY set from params if we don't have an active exercise already
-         if (route?.params?.exerciseToStart && !suggestedExercise) {
-            setSuggestedExercise(route.params.exerciseToStart);
-            setIsAiSession(true);
-            // Clear param immediately after use
-            navigation.setParams({ exerciseToStart: null });
-         } else if (pendingQueue.length > 0 && !suggestedExercise) {
-            setSuggestedExercise(pendingQueue[0]);
-            setIsAiSession(true);
-         }
+        // ONLY set from params if we don't have an active exercise already
+        if (route?.params?.exerciseToStart && !suggestedExercise) {
+          setSuggestedExercise(route.params.exerciseToStart);
+          setIsAiSession(true);
+          // Clear param immediately after use
+          navigation.setParams({ exerciseToStart: null });
+        } else if (pendingQueue.length > 0 && !suggestedExercise) {
+          setSuggestedExercise(pendingQueue[0]);
+          setIsAiSession(true);
+        }
       } else if (!showHistoryOnly && pendingQueue.length > 0 && !suggestedExercise) {
         // Auto-load the next one from queue if we are in AI mode
         setSuggestedExercise(pendingQueue[0]);
@@ -149,24 +149,24 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     if (suggestedExercise) {
       const currentEx = suggestedExercise;
       const queueId = (currentEx as any).queueId || currentEx.id;
-      
+
       // 1. Find matching instance if we don't have a queueId (notification case)
       let finalQueueId = queueId;
       if (!(currentEx as any).queueId) {
         const allSuggested = await ExerciseService.getSuggestedExercises();
-        const inQueue = (allSuggested || []).find(ex => 
-          ex.id == currentEx.id || 
+        const inQueue = (allSuggested || []).find(ex =>
+          ex.id == currentEx.id ||
           (ex.exerciseCode && ex.exerciseCode == currentEx.exerciseCode)
         );
         if (inQueue && inQueue.queueId) {
           finalQueueId = inQueue.queueId;
         }
       }
-      
+
       // 2. Save progress
       await ExerciseService.saveCompletedExercise(currentEx);
       await ExerciseService.removeSuggestedExercise(finalQueueId);
-      
+
       // 3. Reset UI state
       navigation.setParams({ exerciseToStart: null });
       setCountdown(null);
@@ -182,17 +182,17 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       const safeSuggested = suggested || [];
       const safeCompleted = completed || [];
       const uniqueCompleted = Array.from(new Map(safeCompleted.map(item => [item.id, item])).values());
-      
+
       setExercises(all || uniqueCompleted);
       setHistory(uniqueCompleted);
 
       // 5. Flow transition
       if (safeSuggested.length > 0 && isAiSession) {
-         setSuggestedExercise(safeSuggested[0]);
+        setSuggestedExercise(safeSuggested[0]);
       } else {
-         setSuggestedExercise(null);
-         setIsAiSession(false);
-         setShowHistoryOnly(true);
+        setSuggestedExercise(null);
+        setIsAiSession(false);
+        setShowHistoryOnly(true);
       }
     }
   };
@@ -200,14 +200,14 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
   const onRepeat = () => {
     setSessionFinished(false);
     if (suggestedExercise) {
-       setCountdown(suggestedExercise.durationMinutes * 60);
+      setCountdown(suggestedExercise.durationMinutes * 60);
     }
   };
 
   const openLinkIfAny = (text: string) => {
     const urlMatch = text.match(/(https?:\/\/[^\s]+)/g);
     if (urlMatch && urlMatch.length > 0) {
-       Linking.openURL(urlMatch[0]).catch(err => console.error("Couldn't load page", err));
+      Linking.openURL(urlMatch[0]).catch(err => console.error("Couldn't load page", err));
     }
   };
 
@@ -215,14 +215,14 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     const exType = (ex.exerciseType || '').toLowerCase();
     const exName = (ex.name || '').toLowerCase();
     const tab = activeTab.toLowerCase();
-    
+
     if (tab === 'all') return (ex.name && ex.name.toLowerCase().includes(search.toLowerCase()));
-    
+
     // Flexible matching for categories
-    const isMatched = exType.includes(tab) || 
-                      exName.includes(tab) || 
-                      (tab === 'cbt' && (exType.includes('cognitive') || exName.includes('cbt')));
-                      
+    const isMatched = exType.includes(tab) ||
+      exName.includes(tab) ||
+      (tab === 'cbt' && (exType.includes('cognitive') || exName.includes('cbt')));
+
     return isMatched && (ex.name && ex.name.toLowerCase().includes(search.toLowerCase()));
   });
 
@@ -241,64 +241,64 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           <SafeAreaView>
             <View style={s.headerTop}>
               <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
-                 <ArrowLeftIcon size={24} color="#FFFFFF" />
+                <ArrowLeftIcon size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <View style={s.headerActions}><TouchableOpacity><HeartOutline /></TouchableOpacity></View>
             </View>
             <View style={s.headerContent}>
-               <Text style={s.headerTitle}>{ex.name}</Text>
-               <Text style={s.headerSubTitle}>{ex.durationMinutes} min . {ex.exerciseType}</Text>
+              <Text style={s.headerTitle}>{ex.name}</Text>
+              <Text style={s.headerSubTitle}>{ex.durationMinutes} min . {ex.exerciseType}</Text>
             </View>
           </SafeAreaView>
         </View>
 
         <ScrollView style={s.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={s.floatingCard}>
-             <View style={s.cardTopRow}>
-                <Text style={{ fontSize: 32 }}>🧘‍♂️</Text>
-                <View style={s.cardStats}>
-                   <View style={s.statCol}>
-                      <Text style={s.statLabel}>Duration</Text>
-                      <Text style={s.statValue}>{ex.durationMinutes || 5} min</Text>
-                   </View>
-                   <View style={s.statCol}>
-                      <Text style={s.statLabel}>Rating</Text>
-                      <View style={s.ratingRow}>
-                         <StarIcon size={12} color="#F59E0B" /><Text style={[s.statValue, { color: '#F59E0B', marginLeft: 4 }]}>4.9</Text>
-                      </View>
-                   </View>
+            <View style={s.cardTopRow}>
+              <Text style={{ fontSize: 32 }}>🧘‍♂️</Text>
+              <View style={s.cardStats}>
+                <View style={s.statCol}>
+                  <Text style={s.statLabel}>Duration</Text>
+                  <Text style={s.statValue}>{ex.durationMinutes || 5} min</Text>
                 </View>
-             </View>
-             
-             {/* منطق الأزرار يظهر فقط إذا كانت التمرينة قادمة من الـ AI */}
-             {isAiSession ? (
-               sessionFinished ? (
-                 <View style={s.actionRow}>
-                    <TouchableOpacity style={[s.startNowBtn, { flex: 1, backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                      <Text style={[s.startNowText, { color: colors.white }]}>Done ✨</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[s.startNowBtn, { flex: 1, marginLeft: 10, backgroundColor: colors.white }]} onPress={onRepeat}>
-                      <Text style={s.startNowText}>Repeat 🔄</Text>
-                    </TouchableOpacity>
-                 </View>
-               ) : countdown !== null && countdown > 0 ? (
-                   <View style={[s.startNowBtn, { backgroundColor: '#1E293B', borderWidth: 0 }]}>
-                      <Text style={[s.startNowText, { color: '#FFF' }]}>
-                         {Math.floor(countdown / 60).toString().padStart(2, '0')}:{(countdown % 60).toString().padStart(2, '0')}
-                      </Text>
-                   </View>
-               ) : hasTimer ? (
-                  <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
-                     <PlayIcon /><Text style={s.startNowText}>Start Timer ({ex.durationMinutes} min)</Text>
+                <View style={s.statCol}>
+                  <Text style={s.statLabel}>Rating</Text>
+                  <View style={s.ratingRow}>
+                    <StarIcon size={12} color="#F59E0B" /><Text style={[s.statValue, { color: '#F59E0B', marginLeft: 4 }]}>4.9</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* منطق الأزرار يظهر فقط إذا كانت التمرينة قادمة من الـ AI */}
+            {isAiSession ? (
+              sessionFinished ? (
+                <View style={s.actionRow}>
+                  <TouchableOpacity style={[s.startNowBtn, { flex: 1, backgroundColor: colors.success }]} onPress={onExerciseDone}>
+                    <Text style={[s.startNowText, { color: colors.white }]}>Done ✨</Text>
                   </TouchableOpacity>
-               ) : (
-                  <TouchableOpacity style={[s.startNowBtn, { backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                     <Text style={[s.startNowText, { color: colors.white }]}>Done ✅</Text>
+                  <TouchableOpacity style={[s.startNowBtn, { flex: 1, marginLeft: 10, backgroundColor: colors.white }]} onPress={onRepeat}>
+                    <Text style={s.startNowText}>Repeat 🔄</Text>
                   </TouchableOpacity>
-               )
-             ) : (
-               <View style={{ height: 20 }} />
-             )}
+                </View>
+              ) : countdown !== null && countdown > 0 ? (
+                <View style={[s.startNowBtn, { backgroundColor: '#1E293B', borderWidth: 0 }]}>
+                  <Text style={[s.startNowText, { color: '#FFF' }]}>
+                    {Math.floor(countdown / 60).toString().padStart(2, '0')}:{(countdown % 60).toString().padStart(2, '0')}
+                  </Text>
+                </View>
+              ) : hasTimer ? (
+                <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
+                  <PlayIcon /><Text style={s.startNowText}>Start Timer ({ex.durationMinutes} min)</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={[s.startNowBtn, { backgroundColor: colors.success }]} onPress={onExerciseDone}>
+                  <Text style={[s.startNowText, { color: colors.white }]}>Done ✅</Text>
+                </TouchableOpacity>
+              )
+            ) : (
+              <View style={{ height: 20 }} />
+            )}
           </View>
 
           <Text style={s.sectionTitle}>Overview</Text>
@@ -327,7 +327,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
               })}
             </>
           ) : null}
-          
+
           <TouchableOpacity style={s.seeAllBtn} onPress={() => setShowHistoryOnly(true)}>
             <Text style={s.seeAllText}>Skip to All Exercises</Text>
           </TouchableOpacity>
@@ -335,18 +335,18 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         </ScrollView>
 
         <Modal visible={countdown !== null} transparent animationType="fade">
-           <View style={s.countdownOverlay}>
-              <Text style={s.countdownText}>{Math.floor(countdown! / 60)}:{String(countdown! % 60).padStart(2, '0')}</Text>
-              <Text style={s.countdownSubText}>{isPaused ? 'Paused' : 'Focus and breathe...'}</Text>
-               {isPaused ? (
-                 <View style={{ flexDirection: 'row', gap: 10 }}>
-                   <TouchableOpacity style={[s.cancelBtn, {backgroundColor: colors.success}]} onPress={() => setIsPaused(false)}><Text style={s.cancelText}>Resume</Text></TouchableOpacity>
-                   <TouchableOpacity style={[s.cancelBtn, {backgroundColor: '#f44'}]} onPress={() => {setCountdown(null); setIsPaused(false);}}><Text style={s.cancelText}>Close</Text></TouchableOpacity>
-                 </View>
-               ) : (
-                 <TouchableOpacity style={s.cancelBtn} onPress={() => setIsPaused(true)}><Text style={s.cancelText}>Pause / Stop</Text></TouchableOpacity>
-               )}
-           </View>
+          <View style={s.countdownOverlay}>
+            <Text style={s.countdownText}>{Math.floor(countdown! / 60)}:{String(countdown! % 60).padStart(2, '0')}</Text>
+            <Text style={s.countdownSubText}>{isPaused ? 'Paused' : 'Focus and breathe...'}</Text>
+            {isPaused ? (
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.success }]} onPress={() => setIsPaused(false)}><Text style={s.cancelText}>Resume</Text></TouchableOpacity>
+                <TouchableOpacity style={[s.cancelBtn, { backgroundColor: '#f44' }]} onPress={() => { setCountdown(null); setIsPaused(false); }}><Text style={s.cancelText}>Close</Text></TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setIsPaused(true)}><Text style={s.cancelText}>Pause / Stop</Text></TouchableOpacity>
+            )}
+          </View>
         </Modal>
       </View>
     );
@@ -357,9 +357,9 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     <SafeAreaView style={s.safeArea}>
       <View style={s.listHeaderRow}>
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><ArrowLeftIcon size={24} color={colors.textPrimary} /></TouchableOpacity>
-        <View style={s.searchContainer}><SearchIcon /><TextInput style={s.searchInput} placeholder="Search exercises..." value={search} onChangeText={setSearch}/></View>
+        <View style={s.searchContainer}><SearchIcon /><TextInput style={s.searchInput} placeholder="Search exercises..." value={search} onChangeText={setSearch} /></View>
       </View>
-      
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
         <View style={s.tabsContainer}>
           {CATEGORIES.map(cat => (
@@ -372,12 +372,12 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
 
       {/* Dynamic Wellness Card with Conditional Styles */}
       <View style={[
-        s.featuredCard, 
+        s.featuredCard,
         activeTab === 'All' ? s.featuredCardLarge : s.featuredCardSmall
       ]}>
         <View style={s.featuredHeader}>
-           <Text style={{ fontSize: 24, marginRight: 8 }}>{tipData.title.split(' ')[0]}</Text>
-           <Text style={s.featuredHeaderText}>{activeTab === 'All' ? 'Wellness Tip' : `${activeTab} Guide`}</Text>
+          <Text style={{ fontSize: 24, marginRight: 8 }}>{tipData.title.split(' ')[0]}</Text>
+          <Text style={s.featuredHeaderText}>{activeTab === 'All' ? 'Wellness Tip' : `${activeTab} Guide`}</Text>
         </View>
         <Text style={s.featuredTitle}>{tipData.title.split(' ').slice(1).join(' ')}</Text>
         <View style={{ marginTop: 8 }}>
@@ -393,28 +393,28 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       <ScrollView style={s.listContainer}>
         {loading ? <ActivityIndicator size="large" color={colors.primary} /> : (
           filteredExercises.length === 0 ? <Text style={s.emptyHint}>No exercises.</Text> :
-          filteredExercises.map((ex, idx) => (
-            <TouchableOpacity 
-              key={`${ex.id}-${idx}`} 
-              style={s.exerciseCard} 
-              onPress={() => { 
-                setSuggestedExercise(ex); 
-                setIsAiSession(true); 
-                setShowHistoryOnly(false); 
-                setSessionFinished(false); 
-                setCountdown(null); 
-              }}
-            >
-              <View style={s.cardLeft}><View style={s.iconBox}><Text style={{fontSize: 24}}>🧘‍♂️</Text></View>
-                <View style={s.cardBody}><Text style={s.cardTitle}>{ex.name}</Text><Text style={s.cardDesc} numberOfLines={1}>{ex.description}</Text>
-                  <View style={s.metaRow}><ClockIcon /><Text style={s.metaText}>{ex.durationMinutes}m</Text>
-                    {history.some(h => h.id === ex.id) && <View style={s.doneTag}><Text style={s.doneTagText}>COMPLETED</Text></View>}
-                    <View style={s.typeTag}><Text style={s.typeTagText}>{ex.exerciseType}</Text></View>
+            filteredExercises.map((ex, idx) => (
+              <TouchableOpacity
+                key={`${ex.id}-${idx}`}
+                style={s.exerciseCard}
+                onPress={() => {
+                  setSuggestedExercise(ex);
+                  setIsAiSession(true);
+                  setShowHistoryOnly(false);
+                  setSessionFinished(false);
+                  setCountdown(null);
+                }}
+              >
+                <View style={s.cardLeft}><View style={s.iconBox}><Text style={{ fontSize: 24 }}>🧘‍♂️</Text></View>
+                  <View style={s.cardBody}><Text style={s.cardTitle}>{ex.name}</Text><Text style={s.cardDesc} numberOfLines={1}>{ex.description}</Text>
+                    <View style={s.metaRow}><ClockIcon /><Text style={s.metaText}>{ex.durationMinutes}m</Text>
+                      {history.some(h => h.id === ex.id) && <View style={s.doneTag}><Text style={s.doneTagText}>COMPLETED</Text></View>}
+                      <View style={s.typeTag}><Text style={s.typeTagText}>{ex.exerciseType}</Text></View>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))
+              </TouchableOpacity>
+            ))
         )}
       </ScrollView>
     </SafeAreaView>
