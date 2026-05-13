@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { colors, typography } from '../theme';
 import { Exercise, ExerciseService } from '../services/exerciseService';
@@ -19,7 +19,16 @@ interface Props {
 }
 
 export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) => {
-  const [timeLeft, setTimeLeft] = useState(exercise.durationMinutes * 60);
+  // Enrich exercise with detailed metadata if available from library
+  const enrichedExercise = useMemo(() => {
+    if (exercise.exerciseCode) {
+      const details = ExerciseService.getExerciseDetailsByCode(exercise.exerciseCode);
+      return { ...exercise, ...details };
+    }
+    return exercise;
+  }, [exercise]);
+
+  const [timeLeft, setTimeLeft] = useState(enrichedExercise.durationMinutes * 60);
   const [isActive, setIsActive] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
@@ -27,7 +36,7 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
 
   useEffect(() => {
     // تشغيل المؤقت فوراً إذا كان هناك وقت
-    if (exercise.durationMinutes > 0) {
+    if (enrichedExercise.durationMinutes > 0) {
       setIsActive(true);
     } else {
       setIsFinished(true); // إذا لم يكن هناك وقت، يظهر زر "Done" مباشرة
@@ -60,7 +69,7 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Mentora: Don't miss your session!",
-          body: `You still have ${Math.ceil(timeLeft / 60)} minutes left in your ${exercise.name} exercise.`,
+          body: `You still have ${Math.ceil(timeLeft / 60)} minutes left in your ${enrichedExercise.name} exercise.`,
         },
         trigger: { seconds: 120 }, // تنبيه بعد دقيقتين كمثال
       });
@@ -68,12 +77,12 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
   };
 
   const handleDone = async () => {
-    await ExerciseService.saveCompletedExercise(exercise);
+    await ExerciseService.saveCompletedExercise(enrichedExercise);
     onComplete();
   };
 
   const handleRepeat = () => {
-    setTimeLeft(exercise.durationMinutes * 60);
+    setTimeLeft(enrichedExercise.durationMinutes * 60);
     setIsActive(true);
     setIsFinished(false);
   };
@@ -88,17 +97,28 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
     <View style={s.card}>
       <View style={s.header}>
         <View>
-          <Text style={s.title}>{exercise.name}</Text>
-          <Text style={s.subtitle}>{exercise.exerciseType} • {exercise.difficulty}</Text>
+          <Text style={s.title}>{enrichedExercise.name}</Text>
+          <Text style={s.subtitle}>{enrichedExercise.exerciseType} • {enrichedExercise.difficulty}</Text>
         </View>
-        {exercise.durationMinutes > 0 && (
+        {enrichedExercise.durationMinutes > 0 && (
           <View style={s.timerBadge}>
             <Text style={s.timerText}>{formatTime(timeLeft)}</Text>
           </View>
         )}
       </View>
 
-      <Text style={s.desc}>{exercise.description}</Text>
+      <Text style={s.desc}>{enrichedExercise.description}</Text>
+
+      {!isFinished && enrichedExercise.durationMinutes > 0 && (
+        <View style={s.timerControlRow}>
+           <TouchableOpacity 
+             style={[s.miniControlBtn, { backgroundColor: isActive ? '#F59E0B' : colors.success }]} 
+             onPress={() => setIsActive(!isActive)}
+           >
+             <Text style={s.miniControlText}>{isActive ? 'Pause' : 'Resume'}</Text>
+           </TouchableOpacity>
+        </View>
+      )}
 
       {isFinished ? (
         <View style={s.actionRow}>
@@ -111,14 +131,14 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
         </View>
       ) : (
         <View style={s.progressContainer}>
-           <View style={[s.progressBar, { width: `${(1 - timeLeft / (exercise.durationMinutes * 60)) * 100}%` }]} />
+           <View style={[s.progressBar, { width: `${(1 - timeLeft / (enrichedExercise.durationMinutes * 60)) * 100}%` }]} />
         </View>
       )}
 
-      {showInstructions && (
+      {showInstructions && enrichedExercise.instructions && (
         <View style={s.instructions}>
           <Text style={s.instrTitle}>How to Perform:</Text>
-          <Text style={s.instrText}>{exercise.instructions}</Text>
+          <Text style={s.instrText}>{enrichedExercise.instructions}</Text>
         </View>
       )}
     </View>
@@ -148,10 +168,12 @@ const s = StyleSheet.create({
   title: {
     ...typography.h4,
     color: colors.textPrimary,
+    textAlign: 'left',
   },
   subtitle: {
     ...typography.caption,
     color: colors.textMuted,
+    textAlign: 'left',
   },
   timerBadge: {
     backgroundColor: colors.primaryLight,
@@ -168,6 +190,7 @@ const s = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     marginBottom: 16,
+    textAlign: 'left',
   },
   actionRow: {
     flexDirection: 'row',
@@ -219,10 +242,27 @@ const s = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: 'bold',
     marginBottom: 4,
+    textAlign: 'left',
   },
   instrText: {
     ...typography.caption,
     color: colors.textSecondary,
     lineHeight: 18,
+    textAlign: 'left',
+  },
+  timerControlRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginBottom: 12,
+  },
+  miniControlBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  miniControlText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

@@ -15,41 +15,134 @@ export interface Exercise {
 }
 
 export const EXERCISE_LIBRARY_MAP: Record<string, Partial<Exercise>> = {
-  'CBT_THOUGHT_RECORD_DAILY': { name: 'CBT Thought Record', description: 'A daily journal to challenge negative thoughts.', exerciseType: 'CBT', durationMinutes: 10 },
-  'WORRY_SCHEDULING_15MIN': { name: 'Worry Scheduling', description: 'Allocate 15 minutes to process your worries.', exerciseType: 'CBT', durationMinutes: 15 },
-  'SLEEP_HYGIENE_CHECKLIST': { name: 'Sleep Hygiene Checklist', description: 'Review your pre-sleep habits for better rest.', exerciseType: 'Sleep', durationMinutes: 5 },
-  'GRATITUDE_JOURNAL_3XWEEK': { name: 'Gratitude Journal', description: 'Write down things you are grateful for.', exerciseType: 'Mindfulness', durationMinutes: 5 },
-  'SIMPLE_BREATHING_1XDAY': { name: 'Simple Breathing', description: 'A basic deep breathing exercise to relax.', exerciseType: 'Breathing', durationMinutes: 3 },
-  'MAINTAIN_SLEEP_SCHEDULE': { name: 'Maintain Sleep Schedule', description: 'Set a consistent sleep and wake time.', exerciseType: 'Sleep', durationMinutes: 0 },
-  'CONTACT_ONE_TRUSTED_PERSON': { name: 'Reach Out', description: 'Contact a trusted friend or family member.', exerciseType: 'Social', durationMinutes: 5 },
-  'REALITY_CHECK_JOURNAL_WEEKLY': { name: 'Reality Check Journal', description: 'A weekly check-in to ground your thoughts.', exerciseType: 'CBT', durationMinutes: 10 },
-  'NO_CRISIS_ACTION': { name: 'Stay Safe', description: 'Follow your safety plan and stay grounded.', exerciseType: 'Safety', durationMinutes: 0 },
-  'ENCOURAGE_FIRST_CHECKIN': { name: 'First Check-in', description: 'Encourage yourself to log your feelings.', exerciseType: 'Behavioral', durationMinutes: 2 },
-  '5_SENSES_GROUNDING': { name: '5 Senses Grounding', description: 'Ground yourself using your 5 senses.', exerciseType: 'Relaxation', durationMinutes: 5 },
-  'BOX_BREATHING_3MIN': { name: 'Box Breathing', description: 'Inhale, hold, exhale, and hold for 4 seconds each.', exerciseType: 'Breathing', durationMinutes: 3 },
-  'APP_REMINDER_SETUP': { name: 'App Reminder Setup', description: 'Set up reminders to check in daily.', exerciseType: 'Behavioral', durationMinutes: 2 },
-  'ONE_EXERCISE_TODAY': { name: 'One Exercise Today', description: 'Commit to completing just one exercise today.', exerciseType: 'Behavioral', durationMinutes: 5 },
-  'NORMAL_COPING_SUPPORT': { name: 'Coping Support', description: 'Use your normal coping mechanisms.', exerciseType: 'Safety', durationMinutes: 5 },
-  'THOUGHT_AWARENESS_DAILY': { name: 'Thought Awareness', description: 'Pay attention to your thoughts today.', exerciseType: 'Mindfulness', durationMinutes: 5 },
-  'CRISIS_LINE_INFO': { name: 'Crisis Line Info', description: 'Keep crisis line numbers handy.', exerciseType: 'Safety', durationMinutes: 0 },
-  'ONLINE_SUPPORT_GROUPS': { name: 'Online Support Groups', description: 'Join an online group for support.', exerciseType: 'Social', durationMinutes: 15 },
-  'EVENING_ROUTINE_CHECK': { name: 'Evening Routine', description: 'Review your evening routine.', exerciseType: 'Sleep', durationMinutes: 5 },
-  'LIGHT_DAILY_MOVEMENT': { name: 'Light Movement', description: 'Engage in light physical activity.', exerciseType: 'Behavioral', durationMinutes: 10 },
-  'ROUTINE_BREAKS': { name: 'Routine Breaks', description: 'Take breaks throughout your day.', exerciseType: 'Relaxation', durationMinutes: 5 },
-  'HOBBY_TIME_WEEKLY': { name: 'Hobby Time', description: 'Dedicate time to a hobby this week.', exerciseType: 'Behavioral', durationMinutes: 30 },
-  'SOCIAL_ACTIVITY_WEEKLY': { name: 'Social Activity', description: 'Plan a social activity this week.', exerciseType: 'Social', durationMinutes: 30 },
-  'LIGHT_STRETCHING_10MIN': { name: 'Light Stretching', description: 'Stretch your body for 10 minutes.', exerciseType: 'Relaxation', durationMinutes: 10 },
-  'ROUTINE_SELFCARE_CHECKLIST': { name: 'Self-Care Checklist', description: 'Complete your self-care routine.', exerciseType: 'Behavioral', durationMinutes: 5 },
-  'LIGHT_JOURNALING_3XWEEK': { name: 'Light Journaling', description: 'Journal lightly 3 times a week.', exerciseType: 'Mindfulness', durationMinutes: 10 },
-  'BASIC_BREATHING_1XDAY': { name: 'Basic Breathing', description: 'Practice basic breathing once a day.', exerciseType: 'Breathing', durationMinutes: 3 }
+  'CBT_THOUGHT_RECORD_DAILY': { 
+    name: 'CBT Thought Record', 
+    description: 'A daily journal to identify and challenge negative thought patterns.', 
+    exerciseType: 'CBT', 
+    durationMinutes: 10,
+    instructions: '1. Identify the upsetting situation.\n2. Write down the automatic thoughts that came to mind.\n3. Look for evidence supporting and contradicting these thoughts.\n4. Formulate a more balanced perspective.'
+  },
+  'WORRY_SCHEDULING_15MIN': { 
+    name: 'Worry Scheduling', 
+    description: 'Allocate a specific time in your day to process worries instead of worrying all day.', 
+    exerciseType: 'CBT', 
+    durationMinutes: 15,
+    instructions: '1. Choose a "Worry Time" (e.g., 5 PM).\n2. If you worry during the day, write it down and wait for your scheduled time.\n3. During the 15 minutes, focus only on your worries and look for solutions.'
+  },
+  'SLEEP_HYGIENE_CHECKLIST': { 
+    name: 'Sleep Hygiene Checklist', 
+    description: 'Review your pre-sleep habits to improve your quality of rest.', 
+    exerciseType: 'Sleep', 
+    durationMinutes: 0,
+    instructions: '1. Avoid caffeine 6 hours before bed.\n2. Stay away from screens for 1 hour before sleep.\n3. Ensure your room is dark and cool.'
+  },
+  'GRATITUDE_JOURNAL_3XWEEK': { 
+    name: 'Gratitude Journal', 
+    description: 'Write down things you are grateful for to boost your positivity.', 
+    exerciseType: 'Mindfulness', 
+    durationMinutes: 5,
+    instructions: '1. Think of 3 positive things that happened today.\n2. Write down exactly why you are grateful for these things.\n3. Savor the positive feelings while writing.'
+  },
+  'SIMPLE_BREATHING_1XDAY': { 
+    name: 'Simple Deep Breathing', 
+    description: 'A basic breathing exercise to calm your nervous system.', 
+    exerciseType: 'Breathing', 
+    durationMinutes: 4,
+    instructions: '1. Sit comfortably.\n2. Inhale deeply through your nose for 4 seconds.\n3. Hold for 2 seconds.\n4. Exhale slowly through your mouth for 6 seconds.'
+  },
+  'MAINTAIN_SLEEP_SCHEDULE': { 
+    name: 'Maintain Sleep Schedule', 
+    description: 'Set a consistent sleep and wake time for every day.', 
+    exerciseType: 'Sleep', 
+    durationMinutes: 0,
+    instructions: '1. Choose a fixed bedtime.\n2. Commit to waking up at the same time even on weekends.'
+  },
+  'CONTACT_ONE_TRUSTED_PERSON': { 
+    name: 'Reach Out', 
+    description: 'Social connection to reduce feelings of isolation.', 
+    exerciseType: 'Social', 
+    durationMinutes: 0,
+    instructions: '1. Choose a friend or relative you feel comfortable with.\n2. Send a message or call to check in.\n3. Share something simple about your day.'
+  },
+  'REALITY_CHECK_JOURNAL_WEEKLY': { 
+    name: 'Reality Check Journal', 
+    description: 'A weekly exercise to evaluate how realistic your worrying thoughts are.', 
+    exerciseType: 'CBT', 
+    durationMinutes: 10,
+    instructions: '1. Write down a thought that worries you a lot.\n2. Ask yourself: what is the actual likelihood of this happening?\n3. What is the worst that could happen, and can you handle it?'
+  },
+  '5_SENSES_GROUNDING': { 
+    name: '5 Senses Grounding', 
+    description: 'A technique to calm anxiety by focusing on your senses.', 
+    exerciseType: 'Relaxation', 
+    durationMinutes: 5,
+    instructions: '1. Notice 5 things you can see.\n2. Notice 4 things you can touch.\n3. Notice 3 things you can hear.\n4. Notice 2 things you can smell.\n5. Notice 1 thing you can taste.'
+  },
+  'BOX_BREATHING_3MIN': { 
+    name: 'Box Breathing', 
+    description: 'A powerful breathing technique for focus and calm.', 
+    exerciseType: 'Breathing', 
+    durationMinutes: 3,
+    instructions: '1. Inhale for 4 seconds.\n2. Hold for 4 seconds.\n3. Exhale for 4 seconds.\n4. Wait for 4 seconds before inhaling again.'
+  },
+  'BASIC_BREATHING_1XDAY': { 
+    name: 'Daily Breathing Exercise', 
+    description: 'Practice mindful breathing once a day to maintain emotional balance.', 
+    exerciseType: 'Breathing', 
+    durationMinutes: 3,
+    instructions: '1. Focus only on the air entering and leaving your lungs.\n2. If your mind wanders, gently bring it back to your breath.'
+  },
+  'PROFESSIONAL_HELP_INFO': {
+    name: 'Professional Help Guide',
+    description: 'Information on how to reach out to mental health professionals for support.',
+    exerciseType: 'Support',
+    durationMinutes: 0,
+    instructions: '1. Research local therapists or counselors.\n2. Check your insurance for mental health coverage.\n3. Prepare a list of questions for your first session.'
+  },
+  'PROBLEM_SOLVING_WORKSHEET': {
+    name: 'Problem Solving Worksheet',
+    description: 'A structured approach to tackling difficult life challenges.',
+    exerciseType: 'CBT',
+    durationMinutes: 15,
+    instructions: '1. Clearly define the problem you are facing.\n2. Brainstorm at least 5 possible solutions.\n3. Evaluate the pros and cons of each solution.\n4. Pick one and create an action plan.'
+  },
+  'PANIC_RESPONSE_STEPS': {
+    name: 'Panic Response Steps',
+    description: 'Immediate actions to take when you feel a panic attack coming on.',
+    exerciseType: 'Safety',
+    durationMinutes: 10,
+    instructions: '1. Remind yourself that the feeling is temporary and safe.\n2. Focus on grounding yourself (5-4-3-2-1 technique).\n3. Breathe slowly and deeply into your belly.'
+  },
+  'NO_CRISIS_ACTION': {
+    name: 'Safety Maintenance',
+    description: 'Daily habits to keep yourself safe and emotionally stable.',
+    exerciseType: 'Safety',
+    durationMinutes: 0,
+    instructions: '1. Review your safety triggers.\n2. Connect with your support system early.\n3. Stay in a safe environment and avoid isolation.'
+  },
+  'ENCOURAGE_FIRST_CHECKIN': {
+    name: 'First Check-in',
+    description: 'Getting started with your journaling habit for mental wellness.',
+    exerciseType: 'Behavioral',
+    durationMinutes: 0,
+    instructions: '1. Write just one sentence about how you feel right now.\n2. Don\'t worry about grammar or length.\n3. Acknowledge your effort in taking this first step.'
+  }
 };
+
+
+
 
 let exerciseTokenCache = '';
 
 export const ExerciseService = {
   getExerciseDetailsByCode: (code: string): Partial<Exercise> => {
     if (!code) return {};
-    if (EXERCISE_LIBRARY_MAP[code]) return EXERCISE_LIBRARY_MAP[code];
+    const upperCode = code.toUpperCase();
+    if (EXERCISE_LIBRARY_MAP[upperCode]) return EXERCISE_LIBRARY_MAP[upperCode];
+    
+    // Check for mixed casing match just in case
+    const match = Object.keys(EXERCISE_LIBRARY_MAP).find(k => k.toUpperCase() === upperCode);
+    if (match) return EXERCISE_LIBRARY_MAP[match];
     
     // Fallback formatter if it's a new code not in the map
     const formattedName = code.split('_')
@@ -143,9 +236,9 @@ export const ExerciseService = {
       return data.map((ex: any) => ({
         id: ex.id || ex.Id,
         name: ex.name || ex.Name || ex.exerciseCode || 'AI Suggested',
-        description: ex.description || ex.Description || 'A helpful wellness exercise.',
+        description: ex.description || ex.Description || '',
         exerciseType: ex.exerciseType || ex.ExerciseType || 'General',
-        durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : (ex.DurationMinutes || 5),
+        durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : (ex.DurationMinutes || 0),
         difficulty: ex.difficulty || ex.Difficulty || 'Medium',
         instructions: ex.instructions || ex.Instructions || '',
         isActive: ex.isActive !== undefined ? ex.isActive : true,

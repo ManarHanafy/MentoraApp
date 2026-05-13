@@ -123,19 +123,28 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       const pendingQueue = suggested || [];
 
       if (route?.params?.openSuggested === true && !showHistoryOnly) {
-        // ONLY set from params if we don't have an active exercise already
-        if (route?.params?.exerciseToStart && !suggestedExercise) {
-          setSuggestedExercise(route.params.exerciseToStart);
+        let ex = route.params.exerciseToStart;
+        if (!ex && pendingQueue.length > 0) ex = pendingQueue[0];
+        
+        if (ex && !suggestedExercise) {
+          // Enrich with library details if missing or generic
+          if (ex.exerciseCode) {
+            const details = ExerciseService.getExerciseDetailsByCode(ex.exerciseCode);
+            ex = { ...ex, ...details };
+          }
+          setSuggestedExercise(ex);
           setIsAiSession(true);
-          // Clear param immediately after use
-          navigation.setParams({ exerciseToStart: null });
-        } else if (pendingQueue.length > 0 && !suggestedExercise) {
-          setSuggestedExercise(pendingQueue[0]);
-          setIsAiSession(true);
+          if (route?.params?.exerciseToStart) {
+             navigation.setParams({ exerciseToStart: null });
+          }
         }
       } else if (!showHistoryOnly && pendingQueue.length > 0 && !suggestedExercise) {
-        // Auto-load the next one from queue if we are in AI mode
-        setSuggestedExercise(pendingQueue[0]);
+        let ex = pendingQueue[0];
+        if (ex.exerciseCode) {
+           const details = ExerciseService.getExerciseDetailsByCode(ex.exerciseCode);
+           ex = { ...ex, ...details };
+        }
+        setSuggestedExercise(ex);
         setIsAiSession(true);
       }
     } catch (e) {
@@ -231,9 +240,14 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
   // VIEW 1: TASK DETAIL (التمرين المقترح)
   if (suggestedExercise && !showHistoryOnly) {
     const ex = suggestedExercise;
-    // Only show timer for these specific types, otherwise just show 'Done'
-    const isTimerType = ex.exerciseType && ['breathing', 'relaxation', 'meditation', 'mindfulness', 'grounding', 'inhalation'].includes(ex.exerciseType.toLowerCase());
-    const hasTimer = (ex.durationMinutes || 0) > 0 && isTimerType;
+    // Show timer for any exercise that has a duration defined
+    const hasTimer = (ex.durationMinutes || 0) > 0;
+
+    // Generate a pseudo-random rating based on exercise ID
+    const getRating = (id: any) => {
+      const seed = (typeof id === 'string' ? id.length : id) || 5;
+      return (4.5 + (seed % 5) / 10).toFixed(1);
+    };
 
     return (
       <View style={s.container}>
@@ -264,7 +278,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                 <View style={s.statCol}>
                   <Text style={s.statLabel}>Rating</Text>
                   <View style={s.ratingRow}>
-                    <StarIcon size={12} color="#F59E0B" /><Text style={[s.statValue, { color: '#F59E0B', marginLeft: 4 }]}>4.9</Text>
+                    <StarIcon size={12} color="#F59E0B" /><Text style={[s.statValue, { color: '#F59E0B', marginLeft: 4 }]}>{getRating(ex.id)}</Text>
                   </View>
                 </View>
               </View>
@@ -282,10 +296,24 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                   </TouchableOpacity>
                 </View>
               ) : countdown !== null && countdown > 0 ? (
-                <View style={[s.startNowBtn, { backgroundColor: '#1E293B', borderWidth: 0 }]}>
-                  <Text style={[s.startNowText, { color: '#FFF' }]}>
+                <View style={s.timerContainer}>
+                  <Text style={s.timerCountdown}>
                     {Math.floor(countdown / 60).toString().padStart(2, '0')}:{(countdown % 60).toString().padStart(2, '0')}
                   </Text>
+                  <View style={s.timerControls}>
+                    <TouchableOpacity 
+                      style={[s.timerControlBtn, { backgroundColor: isPaused ? colors.success : '#F59E0B' }]} 
+                      onPress={() => setIsPaused(!isPaused)}
+                    >
+                      <Text style={s.timerControlText}>{isPaused ? 'Resume' : 'Pause'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[s.timerControlBtn, { backgroundColor: '#EF4444' }]} 
+                      onPress={() => { setCountdown(null); setIsPaused(false); }}
+                    >
+                      <Text style={s.timerControlText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : hasTimer ? (
                 <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
@@ -311,6 +339,8 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           {ex.instructions ? (
             <>
               <Text style={s.sectionTitle}>How to Do It</Text>
+
+
               {ex.instructions.split(/(?:\n|->|\. )/).filter(s => s.trim().length > 3).map((step, idx) => {
                 const isLink = step.includes('http');
                 const cleanStep = step.trim().replace(/^\d+[\.\-]\s*/, '');
@@ -438,6 +468,11 @@ const s = StyleSheet.create({
   statValue: { ...typography.bodySmall, color: '#FFFFFF', fontWeight: 'bold' },
   ratingRow: { flexDirection: 'row', alignItems: 'center' },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  timerContainer: { alignItems: 'center', backgroundColor: '#1E293B', borderRadius: 16, padding: 16 },
+  timerCountdown: { fontSize: 48, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 12 },
+  timerControls: { flexDirection: 'row', gap: 12 },
+  timerControlBtn: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 12, minWidth: 100, alignItems: 'center' },
+  timerControlText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
   startNowBtn: { backgroundColor: '#FFFFFF', borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 14, minWidth: 120 },
   startNowText: { ...typography.body, color: '#161B22', fontWeight: '700', marginLeft: 8 },
   sectionTitle: { ...typography.h4, color: '#1E293B', fontWeight: '700', marginBottom: 16 },

@@ -137,20 +137,31 @@ export const styles = StyleSheet.create({
   },
   entryBadge: {
     position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
+    top: spacing.md,
+    right: spacing.md,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFE8A3', // Light orange/gold
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    zIndex: 2,
+  },
+  entryBadgeUnlocked: {
+    backgroundColor: colors.surface,
+    opacity: 0.8,
   },
   entryBadgeMic: {
     fontSize: 14,
   },
   entryBadgeLock: {
-    fontSize: 14,
+    fontSize: 16,
+    color: '#8B4513', // Dark brown lock
   },
   entryContent: {
     flex: 1,
@@ -165,6 +176,15 @@ export const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     marginBottom: spacing.sm,
+    lineHeight: 18,
+  },
+  entryPreviewBlurred: {
+    color: 'rgba(0,0,0,0.1)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+    letterSpacing: -2,
+    opacity: 0.3,
   },
   entryLockedText: {
     color: colors.textMuted,

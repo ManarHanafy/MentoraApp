@@ -284,11 +284,11 @@ export function JournalScreen(): React.ReactElement {
                    
                    return {
                       ...dbMatch,
-                      name: (isNameCode && libraryDetails.name) ? libraryDetails.name : dbMatch.name,
-                      description: libraryDetails.description || dbMatch.description,
-                      exerciseType: libraryDetails.exerciseType || dbMatch.exerciseType,
-                      durationMinutes: libraryDetails.durationMinutes || dbMatch.durationMinutes,
-                      instructions: libraryDetails.instructions || dbMatch.instructions,
+                      name: (isNameCode && libraryDetails.name) ? libraryDetails.name : (dbMatch.name || libraryDetails.name),
+                      description: dbMatch.description || libraryDetails.description,
+                      exerciseType: dbMatch.exerciseType || libraryDetails.exerciseType,
+                      durationMinutes: (libraryDetails.durationMinutes !== undefined) ? libraryDetails.durationMinutes : (dbMatch.durationMinutes || 5),
+                      instructions: dbMatch.instructions || libraryDetails.instructions,
                       exerciseCode: code || dbMatch.exerciseCode
                    };
                 }
@@ -384,40 +384,68 @@ export function JournalScreen(): React.ReactElement {
     }
   };
 
-  const renderEntry = ({ item }: { item: JournalEntry }): React.ReactElement => (
-    <TouchableOpacity onPress={() => setSelectedEntry(item)} activeOpacity={0.9}>
-      <Card style={styles.entryCard} accessibilityRole="button" accessibilityLabel={`Entry: ${item.title}`}>
-      <View style={styles.entryCardInner}>
-        {(item.type === 'record' || item.locked) && (
-          <View style={styles.entryBadge}>
-            <Text style={item.type === 'record' ? styles.entryBadgeMic : styles.entryBadgeLock}>
-              {item.type === 'record' ? '🎤' : '🔒'}
-            </Text>
-          </View>
-        )}
-        <View style={styles.entryContent}>
-          <Text style={styles.entryTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={styles.entryPreview} numberOfLines={2}>
-            {item.preview}
-          </Text>
-          <View style={styles.entryMeta}>
-            <Text style={styles.entryDate}>{item.date}</Text>
-            {item.tags.length > 0 && (
-              <View style={styles.tags}>
-                {item.tags.map((t) => (
-                  <View key={t} style={styles.tag}>
-                    <Text style={styles.tagText}>{t}</Text>
-                  </View>
-                ))}
+  const JournalEntryCard = ({ item }: { item: JournalEntry }) => {
+    const handlePress = () => {
+      setSelectedEntry(item);
+    };
+
+    // Create a garbled/distorted version of the preview if locked
+    const displayPreview = item.locked 
+      ? item.preview.replace(/[a-zA-Z0-9]/g, '█').substring(0, 80) + '...'
+      : item.preview;
+
+    return (
+      <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
+        <Card style={styles.entryCard} accessibilityRole="button" accessibilityLabel={`Entry: ${item.title}`}>
+          <View style={styles.entryCardInner}>
+            {item.locked && (
+              <View style={styles.entryBadge}>
+                <Text style={styles.entryBadgeLock}>🔒</Text>
               </View>
             )}
+            
+            {!item.locked && item.type === 'record' && (
+               <View style={styles.entryBadge}>
+                 <Text style={styles.entryBadgeMic}>🎤</Text>
+               </View>
+            )}
+
+            <View style={styles.entryContent}>
+              <Text style={styles.entryTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              
+              <Text 
+                style={[
+                  styles.entryPreview, 
+                  item.locked && styles.entryPreviewBlurred
+                ]} 
+                numberOfLines={2}
+              >
+                {displayPreview}
+              </Text>
+
+              <View style={styles.entryMeta}>
+                <Text style={styles.entryDate}>{item.date}</Text>
+                {item.tags.length > 0 && (
+                  <View style={styles.tags}>
+                    {item.tags.map((t) => (
+                      <View key={t} style={styles.tag}>
+                        <Text style={styles.tagText}>{t}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
-    </Card>
-    </TouchableOpacity>
+        </Card>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderEntry = ({ item }: { item: JournalEntry }): React.ReactElement => (
+    <JournalEntryCard item={item} />
   );
 
   return (
