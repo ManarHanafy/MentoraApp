@@ -157,10 +157,21 @@ export const ExerciseService = {
     };
   },
 
+  getUserKey: async (baseKey: string): Promise<string> => {
+    const email = await AsyncStorage.getItem('@mentora_user_email');
+    return email ? `${baseKey}_${email}` : baseKey;
+  },
+
   // جلب التوكن
   getAuthToken: async (): Promise<string> => {
     if (exerciseTokenCache) return exerciseTokenCache;
     try {
+      const storedToken = await AsyncStorage.getItem('@mentora_auth_token');
+      if (storedToken) {
+        exerciseTokenCache = storedToken;
+        return storedToken;
+      }
+
       let res = await fetch(`${API_BASE_URL}/Auth/login`, {
         method: 'POST',
         headers: { 
@@ -299,7 +310,8 @@ export const ExerciseService = {
           isActive: true
         };
       });
-      const existingStr = await AsyncStorage.getItem('@suggested_exercises');
+      const key = await ExerciseService.getUserKey('@suggested_exercises');
+      const existingStr = await AsyncStorage.getItem(key);
       let existing = existingStr ? JSON.parse(existingStr) : [];
       
       // Give them unique instance IDs so we can remove them specifically without affecting identical recommendations
@@ -312,7 +324,7 @@ export const ExerciseService = {
       );
       
       const updated = [...timestamped, ...cleanExisting];
-      await AsyncStorage.setItem('@suggested_exercises', JSON.stringify(updated));
+      await AsyncStorage.setItem(key, JSON.stringify(updated));
     } catch (e) {
       console.error('Failed to save suggested exercises:', e);
     }
@@ -320,13 +332,14 @@ export const ExerciseService = {
 
   removeSuggestedExercise: async (queueId: string): Promise<void> => {
     try {
-      const stored = await AsyncStorage.getItem('@suggested_exercises');
+      const key = await ExerciseService.getUserKey('@suggested_exercises');
+      const stored = await AsyncStorage.getItem(key);
       if (stored) {
          let existing = JSON.parse(stored);
          // Filter out the specific exercise instance that was completed
          // Using loose inequality (!=) to handle string/number comparison issues
          existing = existing.filter((ex: any) => ex.queueId != queueId && ex.id != queueId);
-         await AsyncStorage.setItem('@suggested_exercises', JSON.stringify(existing));
+         await AsyncStorage.setItem(key, JSON.stringify(existing));
       }
     } catch(e) {}
   },
@@ -334,7 +347,8 @@ export const ExerciseService = {
   // جلب التمارين المقترحة
   getSuggestedExercises: async (): Promise<Exercise[]> => {
     try {
-      const stored = await AsyncStorage.getItem('@suggested_exercises');
+      const key = await ExerciseService.getUserKey('@suggested_exercises');
+      const stored = await AsyncStorage.getItem(key);
       if (stored) {
          return JSON.parse(stored);
       }
@@ -346,27 +360,34 @@ export const ExerciseService = {
 
   getCompletedExercises: async (): Promise<Exercise[]> => {
     try {
-      const stored = await AsyncStorage.getItem('@completed_exercises');
+      const key = await ExerciseService.getUserKey('@completed_exercises');
+      const stored = await AsyncStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     } catch (error) { return []; }
   },
 
   saveCompletedExercise: async (exercise: Exercise) => {
     try {
+      const key = await ExerciseService.getUserKey('@completed_exercises');
       const completed = await ExerciseService.getCompletedExercises();
       // Remove any existing entry with the same ID, then add to the front
       const filtered = completed.filter((c: Exercise) => c.id !== exercise.id);
       const updated = [exercise, ...filtered];
-      await AsyncStorage.setItem('@completed_exercises', JSON.stringify(updated));
+      await AsyncStorage.setItem(key, JSON.stringify(updated));
     } catch (error) { console.error(error); }
   },
 
   // مسح التمارين المقترحة القديمة
   clearSuggestedExercises: async (): Promise<void> => {
     try {
-      await AsyncStorage.removeItem('@suggested_exercises');
+      const key = await ExerciseService.getUserKey('@suggested_exercises');
+      await AsyncStorage.removeItem(key);
     } catch (e) {
       console.error('Failed to clear suggested exercises:', e);
     }
+  },
+
+  clearCache: () => {
+    exerciseTokenCache = '';
   }
 };

@@ -9,6 +9,7 @@ const USER_EMAIL_KEY = '@mentora_user_email';
 const USER_PHONE_KEY = '@mentora_user_phone';
 const USER_DOB_KEY = '@mentora_user_dob';
 const USER_GENDER_KEY = '@mentora_user_gender';
+const TOKEN_KEY = '@mentora_auth_token';
 
 export interface AuthState {
   hasAccount: boolean;
@@ -24,10 +25,11 @@ export interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  signUp: (email: string, password: string, name?: string) => Promise<void>;
+  signUp: (data: { email: string; password: string; name: string; phone: string; dob: string; gender: string }) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<Pick<AuthState, 'userName' | 'email' | 'phone' | 'dob' | 'gender'>>) => Promise<void>;
+  setToken: (token: string) => Promise<void>;
   setNoAccountMessageVisible: (v: boolean) => void;
   noAccountMessageVisible: boolean;
 }
@@ -83,39 +85,101 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   }, [loadStored]);
 
   const login = useCallback(
-    async (email: string, _password: string): Promise<{ success: boolean; message?: string }> => {
-      const hasAccount = await AsyncStorage.getItem(HAS_ACCOUNT_KEY);
-      if (hasAccount !== 'true') {
-        return { success: false, message: 'no_account' };
+    async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
+      try {
+        const { AuthService } = require('../services/authService');
+        const data = await AuthService.login(email, password);
+        
+        if (data && data.token) {
+          await AsyncStorage.multiSet([
+            [LOGGED_IN_KEY, 'true'],
+            [HAS_ACCOUNT_KEY, 'true'],
+            [TOKEN_KEY, data.token],
+            [USER_EMAIL_KEY, email],
+            [ONBOARDING_DONE_KEY, 'true'],
+          ]);
+          
+          const { ExerciseService } = require('../services/exerciseService');
+          ExerciseService.clearCache();
+          
+          setState((s) => ({ 
+            ...s, 
+            isLoggedIn: true, 
+            email: email, 
+            hasAccount: true,
+            hasCompletedOnboarding: true 
+          }));
+          return { success: true };
+        }
+        return { success: false, message: 'Invalid response from server' };
+      } catch (e: any) {
+        return { success: false, message: e.message || 'Login failed' };
       }
-      await AsyncStorage.multiSet([
-        [LOGGED_IN_KEY, 'true'],
-        [ONBOARDING_DONE_KEY, 'true']
-      ]);
-      setState((s) => ({ ...s, isLoggedIn: true, hasCompletedOnboarding: true }));
-      return { success: true };
     },
     []
   );
 
   const signUp = useCallback(
-    async (email: string, _password: string, name?: string): Promise<void> => {
-      await AsyncStorage.multiSet([
-        [HAS_ACCOUNT_KEY, 'true'],
-        [LOGGED_IN_KEY, 'true'],
-        [USER_NAME_KEY, name && name.trim() ? name.trim() : 'Manar'],
-        [USER_EMAIL_KEY, email],
-      ]);
-      setState((s) => ({
-        ...s,
-        hasAccount: true,
-        isLoggedIn: true,
-        userName: name && name.trim() ? name.trim() : 'Manar',
-        email: email,
-      }));
+    async (formData: { email: string; password: string; name: string; phone: string; dob: string; gender: string }): Promise<void> => {
+      try {
+        const { AuthService } = require('../services/authService');
+        const nameParts = formData.name.trim().split(' ');
+        const firstName = nameParts[0] || 'User';
+        const lastName = nameParts.slice(1).join(' ') || 'Mentora';
+
+        const registerData = {
+          username: formData.email.split('@')[0],
+          email: formData.email,
+          firstName,
+          lastName,
+          password: formData.password,
+          phoneNumber: formData.phone,
+          dateOfBirth: formData.dob,
+          gender: formData.gender
+        };
+
+        const data = await AuthService.register(registerData);
+        
+        await AsyncStorage.multiSet([
+          [HAS_ACCOUNT_KEY, 'true'],
+          [LOGGED_IN_KEY, 'true'],
+          [ONBOARDING_DONE_KEY, 'false'],
+          [USER_NAME_KEY, formData.name],
+          [USER_EMAIL_KEY, formData.email],
+          [USER_PHONE_KEY, formData.phone],
+          [USER_DOB_KEY, formData.dob],
+          [USER_GENDER_KEY, formData.gender],
+        ]);
+        
+        if (data && data.token) {
+          await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        }
+
+        const { ExerciseService } = require('../services/exerciseService');
+        ExerciseService.clearCache();
+
+        setState((s) => ({
+          ...s,
+          hasAccount: true,
+          isLoggedIn: true,
+          hasCompletedOnboarding: false,
+          userName: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          dob: formData.dob,
+          gender: formData.gender
+        }));
+      } catch (e: any) {
+        console.error('Sign up error:', e);
+        throw e;
+      }
     },
     []
   );
+
+  const setToken = useCallback(async (token: string) => {
+    await AsyncStorage.setItem(TOKEN_KEY, token);
+  }, []);
 
   const completeOnboarding = useCallback(async (): Promise<void> => {
     await AsyncStorage.setItem(ONBOARDING_DONE_KEY, 'true');
@@ -123,8 +187,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   }, []);
 
   const logout = useCallback(async (): Promise<void> => {
-    await AsyncStorage.setItem(LOGGED_IN_KEY, 'false');
-    setState((s) => ({ ...s, isLoggedIn: false }));
+    try {
+      const keysToClear = [
+        LOGGED_IN_KEY,
+        TOKEN_KEY,
+        USER_NAME_KEY,
+        USER_EMAIL_KEY,
+        USER_PHONE_KEY,
+        USER_DOB_KEY,
+        USER_GENDER_KEY,
+        ONBOARDING_DONE_KEY,
+      ];
+      await AsyncStorage.multiRemove(keysToClear);
+      
+      const { ExerciseService } = require('../services/exerciseService');
+      ExerciseService.clearCache();
+      
+      // Reset state to default (logged out)
+      setState({
+        ...defaultState,
+        isLoading: false,
+        isLoggedIn: false
+      });
+    } catch (e) {
+      console.error('Logout error', e);
+    }
   }, []);
 
   const updateProfile = useCallback(async (data: Partial<Pick<AuthState, 'userName' | 'email' | 'phone' | 'dob' | 'gender'>>): Promise<void> => {
@@ -148,6 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     completeOnboarding,
     logout,
     updateProfile,
+    setToken,
     setNoAccountMessageVisible,
     noAccountMessageVisible,
   };

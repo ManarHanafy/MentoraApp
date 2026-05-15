@@ -132,4 +132,32 @@ export default StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
+  warningBubble: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 16,
+    padding: 16,
+    marginVertical: 10,
+  },
+  warningText: {
+    ...typography.bodySmall,
+    color: '#92400E',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  crisisBubble: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 16,
+    padding: 16,
+    marginVertical: 10,
+  },
+  crisisText: {
+    ...typography.bodySmall,
+    color: '#991B1B',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
 });

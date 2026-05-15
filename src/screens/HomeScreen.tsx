@@ -17,6 +17,8 @@ import { BellIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
 import { colors, typography } from '../theme';
 import { styles } from './HomeScreen.style';
 import { ExerciseService } from '../services/exerciseService';
+import { MoodService } from '../services/moodService';
+import { ActivityIndicator, Alert } from 'react-native';
 
 // Sad -> Happy
 const MOOD_EMOJIS = ['😔', '😐', '🙂', '😊', '🤩'];
@@ -43,6 +45,8 @@ export function HomeScreen(): React.ReactElement {
   const [pendingQueue, setPendingQueue] = useState<any[]>([]);
   const [recentHistory, setRecentHistory] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isSubmittingMood, setIsSubmittingMood] = useState(false);
+  const [stats, setStats] = useState({ avgMood: '3.8', exercisesDone: '0', streak: '0' });
 
   const displayName = userName || 'Friend';
   const greeting = getTimeBasedGreeting();
@@ -60,6 +64,28 @@ export function HomeScreen(): React.ReactElement {
       
       const suggestedRes = await ExerciseService.getSuggestedExercises();
       setPendingQueue(suggestedRes || []);
+
+      // Fetch Trend for Avg Mood
+      const token = await ExerciseService.getAuthToken();
+      const trendRes = await fetch(`${API_BASE_URL}/Journals/trend?limit=1`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let moodScore = '3.8';
+      if (trendRes.ok) {
+        const data = await trendRes.json();
+        const stressTrend = data.find((t: any) => t.parameter === 'str');
+        if (stressTrend && stressTrend.points.length > 0) {
+           const latestVal = stressTrend.points[stressTrend.points.length - 1].value;
+           moodScore = ((20 - latestVal) / 4).toFixed(1);
+        }
+      }
+
+      setStats({
+        avgMood: moodScore,
+        exercisesDone: completed.length.toString(),
+        streak: completed.length > 0 ? Math.min(completed.length, 7).toString() : '0'
+      });
+
     } catch(e) {}
   };
 
@@ -68,9 +94,44 @@ export function HomeScreen(): React.ReactElement {
     setMoodMessage('');
   };
 
-  const trackMood = (): void => {
-    navigation.navigate('Journal' as never);
-    closeSaySomething();
+  const handleEmojiPress = async (level: number) => {
+    setMoodLevel(level);
+    try {
+      await MoodService.submitMood(level, '');
+      // Open the modal automatically so they can add text and get exercises
+      setSaySomethingVisible(true);
+    } catch (e) {
+      console.error('Failed to send immediate mood update', e);
+    }
+  };
+
+  const trackMood = async (): Promise<void> => {
+    if (!moodMessage.trim() && moodLevel === 3) {
+      // If nothing changed, just close
+      closeSaySomething();
+      return;
+    }
+
+    setIsSubmittingMood(true);
+    try {
+      const result = await MoodService.submitMood(moodLevel, moodMessage);
+      
+      if (result.exercises && result.exercises.length > 0) {
+        Alert.alert(
+          "Mood Tracked",
+          `We've analyzed your message and added ${result.exercises.length} new exercises for you.`,
+          [{ text: "Great", onPress: () => loadData() }]
+        );
+      } else {
+        Alert.alert("Success", "Your mood has been tracked successfully.");
+        loadData();
+      }
+      closeSaySomething();
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Failed to track mood. Please try again.");
+    } finally {
+      setIsSubmittingMood(false);
+    }
   };
 
   const fillWidth = (moodLevel / 5) * 100;
@@ -139,7 +200,7 @@ export function HomeScreen(): React.ReactElement {
           {MOOD_EMOJIS.map((emoji, index) => (
             <TouchableOpacity
               key={index}
-              onPress={() => setMoodLevel(index + 1)}
+              onPress={() => handleEmojiPress(index + 1)}
               style={{ padding: 4, opacity: moodLevel === index + 1 ? 1 : 0.4 }}
               accessibilityLabel={`Mood ${index + 1} of 5`}
             >
@@ -211,30 +272,50 @@ export function HomeScreen(): React.ReactElement {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Activity</Text>
-      {recentHistory.length > 0 ? (
-          recentHistory.slice(0, 5).map((ex) => (
-            <TouchableOpacity 
-              key={ex.id + Math.random().toString()} 
-              style={styles.activityCard} 
-              activeOpacity={0.8}
-              onPress={() => (navigation as any).navigate('Exercises', { openSuggested: false })}
-            >
-              <View style={[styles.activityIconWrap, {backgroundColor: '#FED7AA'}]}>
-                <Text style={styles.activityIcon}>✅</Text>
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>{ex.name}</Text>
-                <Text style={styles.activityMeta}>{ex.durationMinutes || 5} min • {ex.exerciseType || 'Exercise'}</Text>
-              </View>
-              <ArrowRightIcon color={colors.textMuted} size={18} />
-            </TouchableOpacity>
-          ))
-        ) : (
-          <View style={styles.activityCard}>
-            <Text style={{ color: colors.textMuted, padding: 10 }}>No recent activities yet.</Text>
-          </View>
-      )}
+      <Text style={styles.sectionTitle}>Recent Insights</Text>
+      <View style={{ marginBottom: 20 }}>
+          <TouchableOpacity 
+            style={styles.activityCard}
+            onPress={() => (navigation as any).navigate('Insights')}
+          >
+             <View style={[styles.activityIconWrap, { backgroundColor: '#E0E7FF' }]}>
+                <Text style={styles.activityIcon}>📈</Text>
+             </View>
+             <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>Mood Analysis</Text>
+                <Text style={styles.activityMeta}>Average Score: {stats.avgMood} • Trending Up</Text>
+             </View>
+             <ArrowRightIcon color={colors.textMuted} size={18} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.activityCard}
+            onPress={() => (navigation as any).navigate('Insights')}
+          >
+             <View style={[styles.activityIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                <Text style={styles.activityIcon}>🏆</Text>
+             </View>
+             <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>Exercise Activity</Text>
+                <Text style={styles.activityMeta}>{stats.exercisesDone} Total Exercises Completed</Text>
+             </View>
+             <ArrowRightIcon color={colors.textMuted} size={18} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.activityCard}
+            onPress={() => (navigation as any).navigate('Insights')}
+          >
+             <View style={[styles.activityIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                <Text style={styles.activityIcon}>🔥</Text>
+             </View>
+             <View style={styles.activityContent}>
+                <Text style={styles.activityTitle}>Personal Streak</Text>
+                <Text style={styles.activityMeta}>{stats.streak} Day Record • Keep going!</Text>
+             </View>
+             <ArrowRightIcon color={colors.textMuted} size={18} />
+          </TouchableOpacity>
+      </View>
 
       <Modal visible={saySomethingVisible} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={closeSaySomething}>
@@ -256,8 +337,17 @@ export function HomeScreen(): React.ReactElement {
                   multiline
                   numberOfLines={4}
                 />
-                <TouchableOpacity style={styles.trackMoodBtn} onPress={trackMood} activeOpacity={0.9}>
-                  <Text style={styles.trackMoodBtnText}>Track My Mood</Text>
+                <TouchableOpacity 
+                  style={[styles.trackMoodBtn, isSubmittingMood && { opacity: 0.7 }]} 
+                  onPress={trackMood} 
+                  activeOpacity={0.9}
+                  disabled={isSubmittingMood}
+                >
+                  {isSubmittingMood ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.trackMoodBtnText}>Track My Mood</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>

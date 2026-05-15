@@ -122,3 +122,38 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+project.afterEvaluate {
+    def bundleTask = tasks.findByName("createBundleReleaseJsAndAssets")
+    if (bundleTask != null) {
+        def deps = [
+            "generateReactNativeEntryPoint",
+            "generateAutolinkingPackageList",
+            "generateAutolinkingNewArchitectureFiles",
+            "generateReleaseBuildConfig",
+            "checkReleaseAarMetadata",
+            "checkReleaseDuplicateClasses",
+            "mergeReleaseJniLibFolders",
+            "mergeReleaseNativeLibs",
+            "extractReleaseNativeSymbolTables",
+            "stripReleaseDebugSymbols",
+            "buildKotlinToolingMetadata",
+            "mergeReleaseNativeDebugMetadata"
+        ]
+        deps.each { dep ->
+            def taskDep = tasks.findByName(dep)
+            if (taskDep != null) {
+                bundleTask.dependsOn(taskDep)
+            }
+        }
+        
+        // Handle parameterized tasks
+        tasks.all { Task task ->
+            if (task.name.startsWith("configureCMakeRelWithDebInfo") || 
+                task.name.startsWith("buildCMakeRelWithDebInfo")) {
+                bundleTask.dependsOn(task)
+            }
+        }
+    }
+}
+

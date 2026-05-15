@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform, SafeAreaView, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, KeyboardAvoidingView, Platform, SafeAreaView, Image, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
@@ -34,7 +34,18 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
   const [rememberMe, setRememberMe] = useState(false);
 
   const handleSignIn = async () => {
-    await login(email, password);
+    if (!email || !password) {
+      Alert.alert("Error", "Please enter your email and password.");
+      return;
+    }
+    const result = await login(email, password);
+    if (!result.success) {
+      if (result.message === 'no_account') {
+        Alert.alert("Account Not Found", "We couldn't find an account with that email. Please sign up.");
+      } else {
+        Alert.alert("Login Failed", result.message || "Invalid email or password.");
+      }
+    }
   };
 
   return (
