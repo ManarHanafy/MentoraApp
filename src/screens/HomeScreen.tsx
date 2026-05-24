@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   Dimensions,
   FlatList,
 } from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { Card } from '../components';
 import { BellIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
@@ -18,7 +19,9 @@ import { colors, typography } from '../theme';
 import { styles } from './HomeScreen.style';
 import { ExerciseService } from '../services/exerciseService';
 import { MoodService } from '../services/moodService';
+import { ChatService } from '../services/chatService';
 import { ActivityIndicator, Alert } from 'react-native';
+import { API_BASE_URL } from '../config/env';
 
 // Sad -> Happy
 const MOOD_EMOJIS = ['😔', '😐', '🙂', '😊', '🤩'];
@@ -35,7 +38,6 @@ function getTimeBasedGreeting(): string {
 
 export function HomeScreen(): React.ReactElement {
   const navigation = useNavigation();
-  const isFocused = useIsFocused();
   const { userName } = useAuth();
   const [moodLevel, setMoodLevel] = useState(3);
   const [saySomethingVisible, setSaySomethingVisible] = useState(false);
@@ -50,12 +52,57 @@ export function HomeScreen(): React.ReactElement {
 
   const displayName = userName || 'Friend';
   const greeting = getTimeBasedGreeting();
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    if (isFocused) {
-       loadData();
-    }
-  }, [isFocused]);
+  // Reload data every time the screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      // Run initial check
+      ChatService.checkAndFinalizeTimeout().then((finalized) => {
+        if (finalized) loadData();
+      });
+      loadData();
+
+      // Poll every 15s for the session-complete flag set by ChatScreen.finalizeChat
+      pollingRef.current = setInterval(async () => {
+        // Run timeout check first
+        await ChatService.checkAndFinalizeTimeout();
+
+        const flag = await AsyncStorage.getItem('@session_complete_alert');
+        if (flag) {
+          await AsyncStorage.removeItem('@session_complete_alert');
+          await loadData(); // refresh pendingQueue in UI
+
+          if (flag === 'exercises') {
+            Alert.alert(
+              'Session Complete 🌿',
+              'Mentora has suggested new exercises based on your conversation.',
+              [
+                {
+                  text: 'View Exercises',
+                  onPress: () => (navigation as any).navigate('Exercises', { openSuggested: true }),
+                },
+                { text: 'Later', style: 'cancel' },
+              ]
+            );
+          } else if (flag === 'none') {
+            Alert.alert(
+              'Session Ended 🌿',
+              'Your conversation session has been completed and summarized.',
+              [{ text: 'OK' }]
+            );
+          }
+        }
+      }, 15000);
+
+      return () => {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+      };
+    }, [])
+  );
 
   const loadData = async () => {
     try {

@@ -140,6 +140,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
         const data = await AuthService.register(registerData);
         
+        let token = data?.token;
+        if (!token) {
+          try {
+            console.log('No token in signup response. Attempting auto-login for:', formData.email);
+            const loginRes = await AuthService.login(formData.email, formData.password);
+            token = loginRes?.token;
+          } catch (loginErr) {
+            console.error('Auto-login after signup failed:', loginErr);
+          }
+        }
+        
         await AsyncStorage.multiSet([
           [HAS_ACCOUNT_KEY, 'true'],
           [LOGGED_IN_KEY, 'true'],
@@ -151,8 +162,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           [USER_GENDER_KEY, formData.gender],
         ]);
         
-        if (data && data.token) {
-          await AsyncStorage.setItem(TOKEN_KEY, data.token);
+        if (token) {
+          await AsyncStorage.setItem(TOKEN_KEY, token);
         }
 
         const { ExerciseService } = require('../services/exerciseService');

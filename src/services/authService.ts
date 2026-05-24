@@ -22,8 +22,26 @@ export const AuthService = {
       if (response.ok) {
         return await response.json();
       }
-      const error = await response.json();
-      throw new Error(error.message || 'Login failed');
+      
+      let errorMessage = 'Login failed';
+      try {
+        const error = await response.json();
+        if (Array.isArray(error.errors) && error.errors.length > 0) {
+          // Backend returns [{code, field, description}] — show field-level details first
+          errorMessage = error.errors.map((e: any) => e.description || e.message || String(e)).join('\n');
+        } else if (error.errors && typeof error.errors === 'object') {
+          errorMessage = Object.values(error.errors).flat().join('\n');
+        } else if (error.error && typeof error.error === 'string') {
+          errorMessage = error.error;
+        } else if (error.message && typeof error.message === 'string') {
+          errorMessage = error.message;
+        } else if (error.title && typeof error.title === 'string') {
+          errorMessage = error.title;
+        }
+      } catch {
+        errorMessage = `Server Error (${response.status})`;
+      }
+      throw new Error(errorMessage);
     } catch (e) {
       console.error('Login error', e);
       throw e;
@@ -58,8 +76,25 @@ export const AuthService = {
         return await response.json();
       }
       
-      const error = await response.json();
-      throw new Error(error.message || error.error || 'Registration failed');
+      let errorMessage = 'Registration failed';
+      try {
+        const error = await response.json();
+        if (Array.isArray(error.errors) && error.errors.length > 0) {
+          // Backend returns [{code, field, description}] — show field-level details first
+          errorMessage = error.errors.map((e: any) => e.description || e.message || String(e)).join('\n');
+        } else if (error.errors && typeof error.errors === 'object') {
+          errorMessage = Object.values(error.errors).flat().join('\n');
+        } else if (error.error && typeof error.error === 'string') {
+          errorMessage = error.error;
+        } else if (error.message && typeof error.message === 'string') {
+          errorMessage = error.message;
+        } else if (error.title && typeof error.title === 'string') {
+          errorMessage = error.title;
+        }
+      } catch {
+        errorMessage = `Server Error (${response.status})`;
+      }
+      throw new Error(errorMessage);
     } catch (e) {
       console.error('Registration error', e);
       throw e;

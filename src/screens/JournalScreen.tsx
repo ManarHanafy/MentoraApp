@@ -21,52 +21,25 @@ import { styles } from './JournalScreen.style';
 import { API_BASE_URL } from '../config/env';
 import { ExerciseService } from '../services/exerciseService';
 
-let testTokenCache = '';
-
+// Always fetch fresh token from storage (don't cache across sessions)
 const getApiToken = async (): Promise<string> => {
-  if (testTokenCache) return testTokenCache;
   try {
-    const apiUrl = API_BASE_URL;
-    
-    // First, TRY TO LOGIN
-    let res = await fetch(`${apiUrl}/Auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
-    });
-
-    // If login fails (user doesn't exist on this local server), TRY TO REGISTER THEM
-    if (!res.ok) {
-       console.log('Login failed, attempting auto-registration...');
-       await fetch(`${apiUrl}/Users`, {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ 
-           username: 'ManarH',
-           firstName: 'Manar', 
-           lastName: 'Hanafy', 
-           email: 'newmanar@gmail.com', 
-           password: 'Password123!' 
-         })
-       });
-       
-       // Try login one more time after registering
-       res = await fetch(`${apiUrl}/Auth/login`, {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
-       });
-    }
-
-    if (res.ok) {
-      const data = await res.json();
-      testTokenCache = data.token;
-      return testTokenCache;
-    }
+    const token = await AsyncStorage.getItem('@mentora_auth_token');
+    return token || '';
   } catch (e) {
-    console.error('Failed to auto-login for token', e);
+    console.error('Failed to get auth token from storage', e);
+    return '';
   }
-  return '';
+};
+
+// Per-user journal storage key — isolates data between accounts
+const getJournalKey = async (): Promise<string> => {
+  try {
+    const email = await AsyncStorage.getItem('@mentora_user_email');
+    return email ? `@mentora_journal_entries_${email.trim().toLowerCase()}` : '@mentora_journal_entries';
+  } catch {
+    return '@mentora_journal_entries';
+  }
 };
 
 const FILTER_OPTIONS = [
@@ -112,22 +85,26 @@ export function JournalScreen(): React.ReactElement {
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem('@mentora_journal_entries').then(stored => {
-      if (stored) {
-        try {
+    (async () => {
+      try {
+        const key = await getJournalKey();
+        const stored = await AsyncStorage.getItem(key);
+        if (stored) {
           const parsed = JSON.parse(stored) as JournalEntry[];
           // Auto-delete old entries that do not have fullContent
           const validEntries = parsed.filter(e => e.fullContent !== undefined);
           setEntries(validEntries);
-          
           if (validEntries.length !== parsed.length) {
-            AsyncStorage.setItem('@mentora_journal_entries', JSON.stringify(validEntries));
+            await AsyncStorage.setItem(key, JSON.stringify(validEntries));
           }
-        } catch (e) {
-          console.error('Error parsing stored journals', e);
+        } else {
+          setEntries([]); // Clear state if no stored entries exist for this user!
         }
+      } catch (e) {
+        console.error('Failed to load journals', e);
+        setEntries([]);
       }
-    }).catch(e => console.error('Failed to load journals', e));
+    })();
   }, []);
 
   useEffect(() => {
@@ -237,145 +214,63 @@ export function JournalScreen(): React.ReactElement {
         // We map the suggested exercises from the backend to our library exercises
         const aiSuggested = data.suggested_exercises || data.suggestedExercises || data.SuggestedExercises || [];
         
-        // --- Gibberish / AI Validation ---
-        // If the AI couldn't extract any tags, it means the text was random or not meaningful.
-        if (tags.length === 0) {
-            // Delete the invalid entry from the backend to keep history clean
-            const entryId = data.id || data.Id;
-            if (entryId && token) {
-                fetch(`${apiUrl}/Journals/${entryId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }).catch(e => console.log('Silently failed to delete gibberish entry', e));
-            }
-
-            Alert.alert(
-              'Entry Not Understood',
-              'Mentora couldn’t understand your entry. Please write clear and meaningful sentences so we can help you better.'
-            );
-            setIsSaving(false);
-            return; // Prevent saving the journal entry locally
-        }
-        
+        // Process AI suggested exercises if present
         if (aiSuggested && aiSuggested.length > 0) {
-            const allExercises = await ExerciseService.getAllExercises();
-            
-            console.log('--- Matching AI Suggestions ---');
-            console.log('AI Suggestions count:', aiSuggested.length);
-            console.log('Database exercises count:', allExercises.length);
-
-            const enrichedSuggestions = aiSuggested.map((aiEx: any, idx: number) => {
-                const exerciseId = aiEx.id || aiEx.exerciseId || aiEx.ExerciseId;
-                const code = aiEx.exerciseCode || aiEx.ExerciseCode || aiEx.id || '';
-                
-                // 1. Try to find the real exercise in our database library by ID or Code
-                const dbMatch = allExercises.find(ex => 
-                    (exerciseId && ex.id === exerciseId) || 
-                    (code && ex.exerciseCode === code)
-                );
-                
-                // 2. Get beautiful details from our library map using the code
-                const libraryDetails = ExerciseService.getExerciseDetailsByCode(code || (dbMatch as any)?.exerciseCode);
-                
-                if (dbMatch) {
-                   console.log(`Matched exercise: ${dbMatch.name} (${code || exerciseId})`);
-                   // If the database name is just the code, use our library name instead
-                   const isNameCode = dbMatch.name === code || dbMatch.name?.includes('_');
-                   
-                   return {
-                      ...dbMatch,
-                      name: (isNameCode && libraryDetails.name) ? libraryDetails.name : (dbMatch.name || libraryDetails.name),
-                      description: dbMatch.description || libraryDetails.description,
-                      exerciseType: dbMatch.exerciseType || libraryDetails.exerciseType,
-                      durationMinutes: (libraryDetails.durationMinutes !== undefined) ? libraryDetails.durationMinutes : (dbMatch.durationMinutes || 5),
-                      instructions: dbMatch.instructions || libraryDetails.instructions,
-                      exerciseCode: code || dbMatch.exerciseCode
-                   };
-                }
-
-                console.log(`No match found for: ${code || exerciseId}. Using fallback library.`);
-                // 3. Fallback to our hardcoded map if not found in DB at all
-                return {
-                    id: exerciseId || code || `ai_${Date.now()}_${idx}`,
-                    name: libraryDetails.name || 'AI Suggested Exercise',
-                    description: libraryDetails.description || `Recommended for ${aiEx.parameter || 'wellness'}`,
-                    exerciseType: libraryDetails.exerciseType || 'AI Suggestion',
-                    durationMinutes: libraryDetails.durationMinutes || 5,
-                    difficulty: 'Medium',
-                    instructions: libraryDetails.instructions || 'Follow the on-screen prompts.',
-                    isActive: true,
-                    exerciseCode: code
-                };
-            });
-            
-            // Keep only unique exercises
-            const uniqueMap = new Map();
-            enrichedSuggestions.forEach((ex: any) => {
-              const key = ex.id || ex.name;
-              if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, ex);
-              }
-            });
-            const uniqueExercises = Array.from(uniqueMap.values());
-            
-            console.log('=== DISPLAYING UNIQUE AI EXERCISES ===', uniqueExercises.length);
-            await ExerciseService.saveSuggestedExercises(uniqueExercises);
+            await ExerciseService.saveSuggestedExercises(aiSuggested);
+            console.log('Saved', aiSuggested.length, 'suggested exercises from journal');
         }
         
       } else {
+        // AI API failed — inform the user and do NOT save the entry
         Alert.alert(
-          'API Error',
-          `The API returned ${response.status}. It likely requires a Bearer Token for Auth. Tags will not be generated.`
+          'Analysis Failed',
+          'The AI service is temporarily unavailable. Please try again in a moment.',
+          [{ text: 'OK', style: 'default' }]
         );
+        setIsSaving(false);
+        return;
       }
 
+      const newEntry: JournalEntry = {
+        id: Date.now().toString(),
+        title: newTitle.trim() || 'Untitled',
+        preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
+        fullContent: newContent.trim(),
+        date: new Date().toLocaleString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: 'numeric', minute: '2-digit',
+        }),
+        tags,
+        type: 'text',
+        locked: lockedChecked,
+      };
       setEntries((prev) => {
-        const updated: JournalEntry[] = [
-          {
-            id: Date.now().toString(),
-            title: newTitle.trim() || 'Untitled',
-            preview:
-              newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
-            fullContent: newContent.trim(),
-            date: new Date().toLocaleString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            }),
-            tags,
-            type: 'text',
-            locked: lockedChecked,
-          },
-          ...prev,
-        ];
-        AsyncStorage.setItem('@mentora_journal_entries', JSON.stringify(updated)).catch(console.error);
+        const updated = [newEntry, ...prev];
+        getJournalKey().then(key =>
+          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.error)
+        );
         return updated;
       });
     } catch (error) {
       console.error('Failed to save entry to API:', error);
+      const fallbackEntry: JournalEntry = {
+        id: Date.now().toString(),
+        title: newTitle.trim() || 'Untitled',
+        preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
+        fullContent: newContent.trim(),
+        date: new Date().toLocaleString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: 'numeric', minute: '2-digit',
+        }),
+        tags: [],
+        type: 'text',
+        locked: lockedChecked,
+      };
       setEntries((prev) => {
-        const updated: JournalEntry[] = [
-          {
-            id: Date.now().toString(),
-            title: newTitle.trim() || 'Untitled',
-            preview:
-              newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
-            date: new Date().toLocaleString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            }),
-            tags: [],
-            type: 'text',
-            locked: lockedChecked,
-          },
-          ...prev,
-        ];
-        AsyncStorage.setItem('@mentora_journal_entries', JSON.stringify(updated)).catch(console.error);
+        const updated = [fallbackEntry, ...prev];
+        getJournalKey().then(key =>
+          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.error)
+        );
         return updated;
       });
     } finally {

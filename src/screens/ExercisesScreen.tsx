@@ -5,6 +5,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, typography } from '../theme';
 import { ArrowLeftIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
 import { Exercise, ExerciseService } from '../services/exerciseService';
+import { ChatService } from '../services/chatService';
 
 // Icons
 const SearchIcon = () => <Text style={{ color: '#A0AEC0', fontSize: 16 }}>🔍</Text>;
@@ -70,7 +71,11 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      ChatService.checkAndFinalizeTimeout().then(() => {
+        loadData();
+      }).catch(() => {
+        loadData();
+      });
     }, [route?.params])
   );
 
@@ -116,7 +121,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       // Library only shows your completed/saved progress!
       const safeCompleted = completed || [];
       const uniqueCompleted = Array.from(new Map(safeCompleted.map(item => [item.id, item])).values());
-      setExercises(uniqueCompleted);
+      setExercises(all || uniqueCompleted);
       setHistory(uniqueCompleted);
 
       // Show suggested exercise if requested (we take the first pending exercise from the queue)

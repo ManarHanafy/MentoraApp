@@ -1,12 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity, FlatList,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, AppState,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HeartIcon, SendIcon, MicrophoneIcon } from '../components/Icons';
 import { colors } from '../theme';
 import s from './ChatScreen.style';
 import { ChatService } from '../services/chatService';
-import { ExerciseService } from '../services/exerciseService';
 import { useAuth } from '../context/AuthContext';
+
+// How long (ms) the user must be away from the chat before the session is auto-ended
+const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 interface Message {
   id: string;
@@ -17,10 +24,11 @@ interface Message {
 export function ChatScreen(): React.ReactElement {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList>(null);
-  
   const { userName } = useAuth();
   const firstName = userName ? userName.split(' ')[0] : 'there';
+  const navigation = useNavigation<any>();
 
+  // ── state ──────────────────────────────────────────────────────────────────
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -32,49 +40,179 @@ export function ChatScreen(): React.ReactElement {
   const [chatId, setChatId] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
-  // Removed message limits to allow continuous conversation
+  const [isCrisis, setIsCrisis] = useState(false);
 
+  // ── refs for background / timeout ─────────────────────────────────────────
+  const chatIdRef = useRef<string | null>(null);
+  const isEndedRef = useRef(false);
+  const isCrisisRef = useRef(false);
+  const backgroundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const backgroundTimeRef = useRef<number | null>(null);
+  const blurTimeRef = useRef<number | null>(null);
+  const appStateRef = useRef(AppState.currentState);
+
+  // Keep refs in sync with state
+  useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
+  useEffect(() => { isEndedRef.current = isEnded; }, [isEnded]);
+  useEffect(() => { isCrisisRef.current = isCrisis; }, [isCrisis]);
+
+  // Keep active chatId in storage in sync
+  useEffect(() => {
+    if (chatId && !isEnded) {
+      AsyncStorage.setItem('@mentora_active_chat_id', chatId).catch(console.error);
+    } else {
+      AsyncStorage.removeItem('@mentora_active_chat_id').catch(console.error);
+    }
+  }, [chatId, isEnded]);
+
+  // ── Load existing open chat on mount ──────────────────────────────────────
   useEffect(() => {
     const initChat = async () => {
       setIsThinking(true);
       try {
-        const latest = await ChatService.getLatestChat();
-        if (latest && !latest.isEnded) {
-          const resolvedId = latest.id || latest.Id || latest.chatId;
-          setChatId(resolvedId);
-          const details = await ChatService.getChatDetails(resolvedId);
-          if (details && details.messages) {
-            const mappedMessages: Message[] = details.messages.map((m: any) => ({
-              id: m.id || Math.random().toString(),
-              text: m.content || m.text || m.Message || '',
-              sender: m.role === 'assistant' ? 'ai' : (m.role === 'user' ? 'user' : 'ai')
-            }));
-            if (mappedMessages.length > 0) {
-              setMessages(mappedMessages);
+        // Fetch up to 3 recent chat sessions to build a continuous thread of conversation history
+        const recentChats = await ChatService.getRecentChats(3);
+        
+        let allMappedMessages: Message[] = [];
+        let activeChatId: string | null = null;
+        let lastChatEnded = false;
+        let lastChatCrisis = false;
+
+        if (recentChats && recentChats.length > 0) {
+          // Fetch detailed messages for each chat session in parallel
+          const detailsPromises = recentChats.map((c: any) => ChatService.getChatDetails(c.id));
+          const detailsList = await Promise.all(detailsPromises);
+          
+          // Reversing detailsList because recentChats is sorted newest-to-oldest,
+          // so reversing it gives us oldest-to-newest for chronological rendering.
+          const oldestToNewestDetails = detailsList.filter(d => d !== null).reverse();
+          
+          oldestToNewestDetails.forEach((details: any) => {
+            if (details.messages && details.messages.length > 0) {
+              const mapped: Message[] = details.messages.map((m: any) => ({
+                id: (m.id || Math.random()).toString(),
+                text: m.content || m.text || m.Message || '',
+                sender: m.role === 'assistant' ? 'ai' : 'user',
+              }));
+              allMappedMessages = [...allMappedMessages, ...mapped];
             }
-          }
+          });
+
+          // The newest chat session is the first one in the recentChats list
+          const latestChat = recentChats[0];
+          activeChatId = latestChat.id.toString();
+          lastChatEnded = latestChat.isEnded;
+          lastChatCrisis = latestChat.riskLevel === 'crisis';
+        }
+
+        if (allMappedMessages.length > 0) {
+          setMessages(allMappedMessages);
         } else {
-          const id = await ChatService.startChat();
-          if (id) setChatId(id);
+          // No chat sessions at all -> initialize with welcome message
+          setMessages([
+            {
+              id: 'welcome',
+              text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
+              sender: 'ai',
+            }
+          ]);
+        }
+
+        if (activeChatId) {
+          setChatId(activeChatId);
+          setIsEnded(lastChatEnded);
+          setIsCrisis(lastChatCrisis);
+        } else {
+          // Brand new user with zero chats -> start a new chat session on the server
+          const newId = await ChatService.startChat();
+          if (newId) setChatId(newId);
         }
       } catch (e) {
-        console.error('Init chat error', e);
+        console.error('Init chat history error', e);
       } finally {
         setIsThinking(false);
       }
     };
     initChat();
-  }, []);
+  }, [firstName]);
 
+  // ── Auto-scroll on new messages ───────────────────────────────────────────
   useEffect(() => {
-    // Scroll to bottom whenever messages change
     if (messages.length > 0) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages]);
 
+  // ── Background / foreground detection (5-min timeout) ────────────────────
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextState) => {
+      if (
+        appStateRef.current.match(/active/) &&
+        nextState.match(/background|inactive/)
+      ) {
+        // App went to background — save current time
+        if (!isEndedRef.current && chatIdRef.current) {
+          backgroundTimeRef.current = Date.now();
+          await AsyncStorage.setItem('@chat_exit_time', Date.now().toString());
+        }
+      } else if (nextState === 'active') {
+        // App came back to foreground — calculate elapsed time
+        if (backgroundTimeRef.current && !isEndedRef.current && chatIdRef.current) {
+          const elapsed = Date.now() - backgroundTimeRef.current;
+          if (elapsed >= SESSION_TIMEOUT_MS) {
+            finalizeChat(chatIdRef.current!);
+          } else {
+            // Clear exit time only if ChatScreen is currently focused
+            if (blurTimeRef.current === null) {
+              await AsyncStorage.removeItem('@chat_exit_time');
+            }
+          }
+        }
+        backgroundTimeRef.current = null;
+      }
+      appStateRef.current = nextState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // ── Tab blur → start 5-min timer (user navigated away inside app) ─────────
+  useFocusEffect(
+    useCallback(() => {
+      // Screen gained focus — clear exit time from storage
+      AsyncStorage.removeItem('@chat_exit_time').catch(console.error);
+      blurTimeRef.current = null;
+
+      // Cancel any active background timer
+      if (backgroundTimerRef.current) {
+        clearTimeout(backgroundTimerRef.current);
+        backgroundTimerRef.current = null;
+      }
+
+      return () => {
+        // Screen lost focus (user switched tab)
+        if (!isEndedRef.current && chatIdRef.current) {
+          const now = Date.now();
+          blurTimeRef.current = now;
+          AsyncStorage.setItem('@chat_exit_time', now.toString()).catch(console.error);
+          
+          // Also set a backup setTimeout in case they stay in foreground
+          if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
+          backgroundTimerRef.current = setTimeout(() => {
+            if (blurTimeRef.current) { // still blurred
+              finalizeChat(chatIdRef.current!);
+            }
+          }, SESSION_TIMEOUT_MS);
+        }
+      };
+    }, [chatId, isEnded])
+  );
+
+  // ── Send a message ────────────────────────────────────────────────────────
   const handleSend = async () => {
-    if (!inputText.trim() || isThinking || isEnded) return;
+    if (!inputText.trim() || isThinking || isCrisis) return;
 
     const userMessageText = inputText.trim();
     const userMsg: Message = {
@@ -88,66 +226,46 @@ export function ChatScreen(): React.ReactElement {
     setIsThinking(true);
 
     try {
-      // If we don't have a chatId yet, try to get one
       let currentChatId = chatId;
-      if (!currentChatId) {
+      
+      // If the session was previously ended normally (e.g. timeout), start a brand NEW chat session on send!
+      if (isEnded || !currentChatId) {
         currentChatId = await ChatService.startChat();
         if (currentChatId) {
           setChatId(currentChatId);
+          setIsEnded(false);
+          isEndedRef.current = false;
         } else {
-          // Instead of throwing, show a user-friendly error in the chat
-          const errorMsg: Message = {
-            id: 'init_error_' + Date.now(),
-            text: "عذراً، لم نتمكن من بدء جلسة محادثة جديدة. يرجى التأكد من اتصالك بالإنترنت أو محاولة تسجيل الدخول مرة أخرى.\n\n(Could not initialize chat session. Please check your connection or try logging in again.)",
-            sender: 'ai',
-          };
-          setMessages(prev => [...prev, errorMsg]);
+          addMessage('ai', 'Could not start a new session. Please check your connection and try again.');
+          setIsThinking(false);
           return;
         }
       }
-      
+
       const response = await ChatService.sendMessage(currentChatId, userMessageText);
-      
+
       if (response) {
-        const aiMsg: Message = {
-          id: 'ai_' + Date.now(),
-          text: response.reply || response.content || response.message || "I understand. Tell me more.",
-          sender: 'ai',
-        };
+        // The AI reply comes in the "message" field
+        addMessage('ai', response.message || response.reply || response.content || 'I understand. Tell me more.');
 
-        setMessages(prev => [...prev, aiMsg]);
-
-        // Check for exercises
-        const aiSuggested = response.suggestedExercises || response.suggested_exercises || response.SuggestedExercises || [];
-        if (aiSuggested.length > 0) {
-          await ExerciseService.saveSuggestedExercises(aiSuggested);
-          const notifyMsg: Message = {
-            id: 'exercises_notify_' + Date.now(),
-            text: "لقد أضفت لك بعض التمارين الجديدة بناءً على حديثنا! يمكنك العثور عليها في قائمة التمارين.\n\n(I've added some new exercises for you based on our chat! You can find them in the Exercises tab.)",
-            sender: 'ai',
-          };
-          setTimeout(() => {
-            setMessages(prev => [...prev, notifyMsg]);
-          }, 1000);
-        }
-
-        // Check for Crisis or Warning
-        const riskLevel = response.riskLevel || response.risk_level;
-        const suggestedAction = response.suggestedAction || response.suggested_action;
+        // React based on riskLevel returned by the API
+        // API returns: 'normal' | 'elevated' | 'crisis' — no suggestedAction field
+        const riskLevel: string = response.riskLevel || response.risk_level || 'normal';
 
         if (riskLevel === 'crisis') {
-          handleCrisis();
-        } else if (riskLevel === 'elevated' || suggestedAction === 'journal' || suggestedAction === 'exercise') {
-          showWarningMessage(suggestedAction);
+          handleCrisis(currentChatId);
+        } else if (riskLevel === 'elevated') {
+          // Elevated: fetch exercises in background, then show yellow bubble
+          ChatService.summarizeChat(currentChatId)
+            .then((summaryData) => {
+              const exercises = summaryData?._exercises || [];
+              showWarningBubble(exercises.length > 0 ? 'exercise' : 'journal');
+            })
+            .catch(() => showWarningBubble('exercise'));
         }
+        // 'normal' → just continue the conversation, no bubbles
       } else {
-        // Fallback if API fails
-        const fallbackMsg: Message = {
-          id: 'error_' + Date.now(),
-          text: "عذراً، أواجه مشكلة في الاتصال حالياً، لكني ما زلت هنا معك. يمكنك الاستمرار.\n\n(I'm having a little trouble connecting right now, but I'm still here for you. Please continue.)",
-          sender: 'ai',
-        };
-        setMessages(prev => [...prev, fallbackMsg]);
+        addMessage('ai', 'I\'m having a little trouble connecting right now, but I\'m still here for you. Please try again.');
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -156,83 +274,119 @@ export function ChatScreen(): React.ReactElement {
     }
   };
 
-  const handleSummarize = async () => {
-    if (!chatId || isThinking || isEnded) return;
-    setIsThinking(true);
+  // ── End the session (called automatically) ────────────────────────────────
+  const finalizeChat = async (id: string) => {
+    if (isEndedRef.current) return; // Guard against double calls
+    isEndedRef.current = true;
+    setIsEnded(true);
+
     try {
-      const summaryData = await ChatService.summarizeChat(chatId);
-      if (summaryData) {
-        const summaryMsg: Message = {
-          id: 'summary_' + Date.now(),
-          text: "إليك ملخص لما تحدثنا عنه حتى الآن:\n\n" + (summaryData.summary || summaryData.content || summaryData.message || "لقد كنا نتحدث عن مشاعرك وكيفية التعامل مع الضغوط."),
-          sender: 'ai',
-        };
-        setMessages(prev => [...prev, summaryMsg]);
+      const result = await ChatService.endChat(id);
+      const exercises = result?._exercises || [];
+
+      const exerciseCount = exercises.length;
+      const englishInfo = `We've reached the end of our session. I've suggested ${exerciseCount} exercises for you based on our conversation. You can find them on your Home screen or under the notifications bell. Thank you for sharing with me today.`;
+      addMessage('ai', englishInfo);
+
+      // Always save the flag and specify if we got exercises or not
+      const flagValue = exercises.length > 0 ? 'exercises' : 'none';
+      await AsyncStorage.setItem('@session_complete_alert', flagValue);
+
+      // If ChatScreen IS still visible, show alert directly
+      if (exercises.length > 0) {
+        Alert.alert(
+          'Session Complete 🌿',
+          'Mentora has suggested some exercises based on our conversation.',
+          [
+            { text: 'View Exercises', onPress: () => navigation.navigate('Exercises', { openSuggested: true }) },
+            { text: 'Later', style: 'cancel' }
+          ]
+        );
       } else {
-         Alert.alert("Note", "Summary is not available yet. Let's talk a bit more first.");
+        Alert.alert(
+          'Session Ended 🌿',
+          'Your conversation session has been completed and summarized.',
+          [{ text: 'OK' }]
+        );
       }
-    } catch (e) {
-      console.error('Summarize error', e);
-    } finally {
-      setIsThinking(false);
+    } catch (e: any) {
+      console.error('End chat error', e);
+      Alert.alert(
+        'Debug Error ⚠️',
+        `Failed to finalize session: ${e.message || JSON.stringify(e)}`
+      );
     }
   };
 
-  const showWarningMessage = (action?: string) => {
-    let text = "It sounds like you might benefit from processing this further in your journal.";
-    if (action === 'exercise') {
-      text = "I feel like a quick breathing exercise might help you feel more grounded right now.";
-    }
-    
-    const warningMsg: Message = {
+  // ── Crisis handling ───────────────────────────────────────────────────────
+  const handleCrisis = async (id: string) => {
+    setIsCrisis(true);
+    isCrisisRef.current = true;
+    setIsEnded(true);
+    isEndedRef.current = true;
+    addMessage('system_crisis',
+      "I'm concerned about your safety. It's important that you speak with someone who can provide immediate support. Please reach out to a mental health professional or emergency services."
+    );
+    Alert.alert(
+      'Your Safety Matters',
+      'The chat has been stopped for your safety. Please reach out for professional help immediately.',
+    );
+    // Still call endChat so the backend records the session as ended
+    try { await ChatService.endChat(id); } catch (_) {}
+  };
+
+  // ── Yellow warning bubble ─────────────────────────────────────────────────
+  const showWarningBubble = (action: 'exercise' | 'journal') => {
+    const text = action === 'exercise'
+      ? "Based on our conversation, I think a short exercise might help you feel more grounded right now."
+      : "Writing about your feelings in a journal can be a powerful way to process them.";
+
+    const msg: Message = {
       id: 'warning_' + Date.now(),
-      text: text,
+      text,
       sender: 'system_warning',
     };
-    setMessages(prev => [...prev, warningMsg]);
+    setMessages(prev => [...prev, msg]);
   };
 
-  const handleCrisis = () => {
-    setIsEnded(true);
-    const crisisMsg: Message = {
-      id: 'crisis_' + Date.now(),
-      text: "I'm concerned about your safety. It's important that you speak with someone who can provide immediate support. Please use the crisis resources in your profile or call emergency services.",
-      sender: 'system_crisis',
-    };
-    setMessages(prev => [...prev, crisisMsg]);
-    Alert.alert("Crisis Detected", "We've detected that you may be in a dangerous situation. The chat has been stopped for your safety. Please reach out for professional help.");
+  // ── Helper to add a message ───────────────────────────────────────────────
+  const addMessage = (sender: Message['sender'], text: string) => {
+    setMessages(prev => [...prev, { id: sender + '_' + Date.now(), text, sender }]);
   };
 
-  const finalizeChat = async (id: string) => {
-    setIsThinking(true);
-    try {
-      const summaryData = await ChatService.endChat(id);
-      setIsEnded(true);
-      
-      const systemMsg: Message = {
-        id: 'end_' + Date.now(),
-        text: "We've reached the end of our session. I've prepared some exercises for you based on our conversation. You can find them in the Exercises tab.",
-        sender: 'ai',
-      };
-      setMessages(prev => [...prev, systemMsg]);
-      
-      Alert.alert(
-        "Session Complete",
-        "This chat session has ended. Mentora has suggested some new exercises for you to help manage your current feelings.",
-        [{ text: "View Exercises", onPress: () => {} }] // Navigation to exercises would go here
-      );
-    } catch (e) {
-      console.error('End chat error', e);
-    } finally {
-      setIsThinking(false);
-    }
-  };
-
+  // ── Render a single message bubble ────────────────────────────────────────
   const renderMessage = ({ item }: { item: Message }) => {
     if (item.sender === 'system_warning') {
       return (
-        <View style={s.warningBubble}>
-          <Text style={s.warningText}>⚠️ {item.text}</Text>
+        <View style={[s.warningBubble, { padding: 18, borderLeftWidth: 4, borderLeftColor: '#F59E0B' }]}>
+          <Text style={[s.warningText, { textAlign: 'left', fontSize: 14, marginBottom: 12, lineHeight: 20 }]}>
+            ⚠️ {item.text}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+            <TouchableOpacity
+              style={{
+                flex: 1, backgroundColor: '#F59E0B', paddingVertical: 10,
+                borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+                flexDirection: 'row', gap: 4,
+                shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.2, shadowRadius: 1.41, elevation: 2,
+              }}
+              onPress={() => navigation.navigate('Exercises', { openSuggested: true })}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>🧘‍♂️ Start Exercise</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                flex: 1, backgroundColor: '#FFF', borderWidth: 1,
+                borderColor: '#F59E0B', paddingVertical: 10, borderRadius: 12,
+                alignItems: 'center', justifyContent: 'center',
+                flexDirection: 'row', gap: 4,
+              }}
+              onPress={() => navigation.navigate('Journal')}
+            >
+              <Text style={{ color: '#F59E0B', fontWeight: 'bold', fontSize: 13 }}>📝 Write Journal</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -255,6 +409,7 @@ export function ChatScreen(): React.ReactElement {
     );
   };
 
+  // ── UI ────────────────────────────────────────────────────────────────────
   return (
     <View style={s.container}>
       <View style={[s.header, { paddingTop: insets.top || 44 }]}>
@@ -265,33 +420,16 @@ export function ChatScreen(): React.ReactElement {
           <View style={s.headerTextContainer}>
             <Text style={s.headerTitle}>Mentora AI</Text>
             <Text style={s.headerSubtitle}>
-              {isEnded ? 'Session Completed' : 'Always here to listen'}
+              {isCrisis ? 'Safety Concern' : isEnded ? 'Session Completed' : 'Always here to listen'}
             </Text>
           </View>
-          
-          {!isEnded && (
-            <View style={{ flexDirection: 'row', marginLeft: 'auto' }}>
-              <TouchableOpacity 
-                style={{ 
-                  backgroundColor: colors.primary + '20', 
-                  paddingHorizontal: 12, 
-                  paddingVertical: 6, 
-                  borderRadius: 20,
-                }} 
-                onPress={handleSummarize}
-                disabled={isThinking}
-              >
-                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>Summarize</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </View>
 
-      <KeyboardAvoidingView 
-        style={s.keyboardAv} 
+      <KeyboardAvoidingView
+        style={s.keyboardAv}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
         <FlatList
           ref={flatListRef}
@@ -304,14 +442,14 @@ export function ChatScreen(): React.ReactElement {
             isThinking ? (
               <View style={[s.messageRow, s.messageRowLeft]}>
                 <View style={[s.messageBubble, s.aiBubble, { paddingVertical: 10 }]}>
-                   <ActivityIndicator color={colors.primary} size="small" />
+                  <ActivityIndicator color={colors.primary} size="small" />
                 </View>
               </View>
             ) : null
           }
         />
 
-        {!isEnded && (
+        {!isCrisis && (
           <View style={[s.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={s.inputContainer}>
               <TextInput
@@ -322,13 +460,14 @@ export function ChatScreen(): React.ReactElement {
                 onChangeText={setInputText}
                 onSubmitEditing={handleSend}
                 editable={!isThinking}
+                multiline
               />
               <TouchableOpacity style={s.micButton}>
                 <MicrophoneIcon color="#9CA3AF" size={24} />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity 
-              style={[s.sendButton, (!inputText.trim() || isThinking) && { opacity: 0.6 }]} 
+            <TouchableOpacity
+              style={[s.sendButton, (!inputText.trim() || isThinking) && { opacity: 0.6 }]}
               onPress={handleSend}
               disabled={!inputText.trim() || isThinking}
             >
@@ -336,13 +475,13 @@ export function ChatScreen(): React.ReactElement {
             </TouchableOpacity>
           </View>
         )}
-        
-        {isEnded && (
-           <View style={[s.inputArea, { paddingBottom: Math.max(insets.bottom, 16), justifyContent: 'center' }]}>
-             <Text style={{ color: colors.textMuted, fontStyle: 'italic' }}>
-               This session has ended. Come back later if you need to talk.
-             </Text>
-           </View>
+
+        {isCrisis && (
+          <View style={[s.inputArea, { paddingBottom: Math.max(insets.bottom, 16), justifyContent: 'center' }]}>
+            <Text style={{ color: 'red', fontStyle: 'italic', textAlign: 'center', fontWeight: 'bold' }}>
+              This session has ended due to safety concerns. Please seek professional help.
+            </Text>
+          </View>
         )}
       </KeyboardAvoidingView>
     </View>

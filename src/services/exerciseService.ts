@@ -12,6 +12,7 @@ export interface Exercise {
   isActive: boolean;
   exerciseCode?: string;
   queueId?: string;
+  completedAt?: string | number;
 }
 
 export const EXERCISE_LIBRARY_MAP: Record<string, Partial<Exercise>> = {
@@ -132,12 +133,11 @@ export const EXERCISE_LIBRARY_MAP: Record<string, Partial<Exercise>> = {
 
 
 
-let exerciseTokenCache = '';
-
 export const ExerciseService = {
-  getExerciseDetailsByCode: (code: string): Partial<Exercise> => {
+  getExerciseDetailsByCode: (code: any): Partial<Exercise> => {
     if (!code) return {};
-    const upperCode = code.toUpperCase();
+    const codeStr = String(code);
+    const upperCode = codeStr.toUpperCase();
     if (EXERCISE_LIBRARY_MAP[upperCode]) return EXERCISE_LIBRARY_MAP[upperCode];
     
     // Check for mixed casing match just in case
@@ -145,7 +145,7 @@ export const ExerciseService = {
     if (match) return EXERCISE_LIBRARY_MAP[match];
     
     // Fallback formatter if it's a new code not in the map
-    const formattedName = code.split('_')
+    const formattedName = codeStr.split('_')
         .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
         
@@ -158,91 +158,57 @@ export const ExerciseService = {
   },
 
   getUserKey: async (baseKey: string): Promise<string> => {
-    const email = await AsyncStorage.getItem('@mentora_user_email');
-    return email ? `${baseKey}_${email}` : baseKey;
-  },
-
-  // جلب التوكن
-  getAuthToken: async (): Promise<string> => {
-    if (exerciseTokenCache) return exerciseTokenCache;
     try {
-      const storedToken = await AsyncStorage.getItem('@mentora_auth_token');
-      if (storedToken) {
-        exerciseTokenCache = storedToken;
-        return storedToken;
-      }
-
-      let res = await fetch(`${API_BASE_URL}/Auth/login`, {
-        method: 'POST',
-        headers: { 
-           'Content-Type': 'application/json',
-           'Cache-Control': 'no-cache',
-           'Pragma': 'no-cache'
-        },
-        body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
-      });
-      
-      // Auto-register if login fails
-      if (!res.ok) {
-         console.log('Login failed for ExerciseService, attempting auto-registration...');
-         await fetch(`${API_BASE_URL}/Users`, {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ 
-             username: 'ManarH',
-             firstName: 'Manar', 
-             lastName: 'Hanafy', 
-             email: 'newmanar@gmail.com', 
-             password: 'Password123!' 
-           })
-         });
-         
-         // Retry login
-         res = await fetch(`${API_BASE_URL}/Auth/login`, {
-           method: 'POST',
-           headers: { 
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache'
-           },
-           body: JSON.stringify({ email: 'newmanar@gmail.com', password: 'Password123!' })
-         });
-      }
-
-      if (res.ok) {
-        const data = await res.json();
-        exerciseTokenCache = data.token;
-        return exerciseTokenCache;
-      }
-    } catch (e) {
-      console.error('Auth failure for exercises', e);
+      const email = await AsyncStorage.getItem('@mentora_user_email');
+      return email ? `${baseKey}_${email.trim().toLowerCase()}` : baseKey;
+    } catch {
+      return baseKey;
     }
-    return '';
   },
 
-  getAllExercises: async (retry = true): Promise<Exercise[]> => {
+  // Always read the current user's token from AsyncStorage (set by AuthContext on login/signup)
+  getAuthToken: async (): Promise<string> => {
+    try {
+      const token = await AsyncStorage.getItem('@mentora_auth_token');
+      return token || '';
+    } catch (e) {
+      console.error('Failed to get auth token', e);
+      return '';
+    }
+  },
+
+  getLocalLibraryExercises: (): Exercise[] => {
+    return Object.entries(EXERCISE_LIBRARY_MAP).map(([code, ex]) => ({
+      id: code,
+      name: ex.name || 'Mindfulness Exercise',
+      description: ex.description || '',
+      exerciseType: ex.exerciseType || 'General',
+      durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : 5,
+      difficulty: ex.difficulty || 'Medium',
+      instructions: ex.instructions || '',
+      isActive: true,
+      exerciseCode: code
+    }));
+  },
+
+  getAllExercises: async (): Promise<Exercise[]> => {
     try {
       const token = await ExerciseService.getAuthToken();
       const response = await fetch(`${API_BASE_URL}/Exercises`, {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
         }
       });
       
-      if (response.status === 401 && retry) {
-         // Token might be expired, clear cache and retry once
-         exerciseTokenCache = '';
-         return await ExerciseService.getAllExercises(false);
-      }
-      
       if (!response.ok) {
-        console.warn(`Exercise API returned ${response.status}. Please check if the server is active.`);
-        return []; // Return empty instead of throwing to avoid red screen
+        console.warn(`Exercise API returned ${response.status}. Falling back to local library.`);
+        return ExerciseService.getLocalLibraryExercises();
       }
       
       const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        return ExerciseService.getLocalLibraryExercises();
+      }
       
       return data.map((ex: any) => ({
         id: ex.id || ex.Id,
@@ -256,8 +222,8 @@ export const ExerciseService = {
         exerciseCode: ex.exerciseCode || ex.ExerciseCode
       }));
     } catch (error) {
-      console.warn('Network error while fetching exercises:', error);
-      return [];
+      console.warn('Network error while fetching exercises, falling back to local library:', error);
+      return ExerciseService.getLocalLibraryExercises();
     }
   },
 
@@ -265,48 +231,42 @@ export const ExerciseService = {
   saveSuggestedExercises: async (exercises: any[]): Promise<void> => {
     try {
       const mapped = exercises.map((ex: any) => {
-        // Handle case where ex is just a string (the name of the exercise)
+        // Handle case where ex is just a string (the name or code of the exercise)
         if (typeof ex === 'string') {
+          const details = ExerciseService.getExerciseDetailsByCode(ex);
           return {
             id: Date.now().toString() + Math.random(),
-            name: ex.split('\n')[0].slice(0, 30), // first sentence/phrase
-            description: ex,                      // The full string goes to Description
-            exerciseType: 'General',
-            durationMinutes: 5,
-            difficulty: 'Medium',
-            instructions: ex,
+            name: details.name || ex.split('\n')[0].slice(0, 30),
+            description: details.description || ex,
+            exerciseType: details.exerciseType || 'General',
+            durationMinutes: details.durationMinutes !== undefined ? details.durationMinutes : 5,
+            difficulty: details.difficulty || 'Medium',
+            instructions: details.instructions || ex,
+            exerciseCode: ex.includes('_') ? ex : undefined,
             isActive: true
           };
         }
         
-        const name = ex.name || ex.Name || ex.title || ex.Title || ex.exerciseName || ex.ExerciseName || ex.label || ex.heading || ex.exercise || ex.Exercise;
-        let description = ex.description || ex.Description || ex.content || ex.Content || ex.summary || ex.text || ex.body || '';
-        const instructions = ex.instructions || ex.Instructions || ex.steps || ex.HowTo || description || '';
-        
-        // Ensure description is never empty for the Overview section
-        if (!description) {
-           description = instructions || name || 'A helpful wellness exercise designed for your current needs.';
-        }
+        // Find code and look up details in local library map
+        const code = ex.exerciseCode || ex.exercise_code || ex.code || (typeof ex.id === 'string' && ex.id.includes('_') ? ex.id : '');
+        const details = code ? ExerciseService.getExerciseDetailsByCode(code) : {};
 
-        // If name is still missing but we have a description, use the first part of description
-        let finalName = name;
-        if (!finalName || finalName === 'AI Suggested Exercise') {
-           if (description && description.length > 5) {
-              finalName = description.split('\n')[0].slice(0, 30);
-              if (description.length > 30) finalName += '...';
-           } else {
-              finalName = 'Mindfulness Exercise';
-           }
-        }
+        const name = ex.name || ex.Name || ex.title || ex.Title || details.name || 'Mindfulness Exercise';
+        const description = ex.description || ex.Description || details.description || 'A recommended wellness exercise designed for your current needs.';
+        const instructions = ex.instructions || ex.Instructions || details.instructions || description || '';
+        const exerciseType = ex.exerciseType || ex.ExerciseType || details.exerciseType || 'General';
+        const durationMinutes = ex.durationMinutes !== undefined ? ex.durationMinutes : (details.durationMinutes !== undefined ? details.durationMinutes : 5);
+        const difficulty = ex.difficulty || ex.Difficulty || details.difficulty || 'Medium';
 
         return {
           id: ex.id || ex.Id || Date.now().toString() + Math.random(),
-          name: finalName,
-          description: description,
-          exerciseType: ex.exerciseType || ex.ExerciseType || ex.type || 'General',
-          durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : (ex.DurationMinutes || ex.duration || 5),
-          difficulty: ex.difficulty || ex.Difficulty || 'Medium',
-          instructions: instructions,
+          name,
+          description,
+          exerciseType,
+          durationMinutes,
+          difficulty,
+          instructions,
+          exerciseCode: code || ex.exerciseCode,
           isActive: true
         };
       });
@@ -344,15 +304,14 @@ export const ExerciseService = {
     } catch(e) {}
   },
 
-  // جلب التمارين المقترحة
+  // جلب التمارين المقترحة المحفوظة محلياً
+  // Note: exercises are saved by ChatService.endChat() and ChatService.summarizeChat()
+  // — no auto-syncing here to avoid unintended side effects
   getSuggestedExercises: async (): Promise<Exercise[]> => {
     try {
       const key = await ExerciseService.getUserKey('@suggested_exercises');
       const stored = await AsyncStorage.getItem(key);
-      if (stored) {
-         return JSON.parse(stored);
-      }
-      return [];
+      return stored ? JSON.parse(stored) : [];
     } catch (error) {
       return [];
     }
@@ -388,6 +347,6 @@ export const ExerciseService = {
   },
 
   clearCache: () => {
-    exerciseTokenCache = '';
+    // Keep as a no-op for AuthContext compatibility during logout
   }
 };
