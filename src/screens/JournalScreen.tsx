@@ -21,6 +21,7 @@ import { styles } from './JournalScreen.style';
 import { API_BASE_URL } from '../config/env';
 import { ExerciseService } from '../services/exerciseService';
 import { useLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Always fetch fresh token from storage (don't cache across sessions)
 const getApiToken = async (): Promise<string> => {
@@ -68,6 +69,7 @@ function matchSearch(entry: JournalEntry, query: string): boolean {
 
 export function JournalScreen(): React.ReactElement {
   const { t, isRTL, language } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPopupVisible, setFilterPopupVisible] = useState(false);
@@ -347,7 +349,7 @@ export function JournalScreen(): React.ReactElement {
   );
 
   return (
-    <View style={styles.container} accessibilityLabel="Journal screen">
+    <View style={[styles.container, { paddingTop: insets.top }]} accessibilityLabel="Journal screen">
       {/* Top: Search + Filter */}
       <View style={[styles.topBar, isRTL && { flexDirection: 'row-reverse' }]}>
         <View style={[styles.searchWrap, isRTL && { flexDirection: 'row-reverse' }]}>

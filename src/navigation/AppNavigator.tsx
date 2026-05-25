@@ -28,7 +28,7 @@ import {
   DeleteAccountScreen,
 } from '../screens';
 import { HomeIcon, ChatIcon, JournalIcon, InsightsIcon, ProfileIcon } from '../components/Icons';
-
+import { SwipeContainer } from '../components';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -49,7 +49,11 @@ function ProfileStack(): React.ReactElement {
   );
 }
 
-
+const SwipeHome = (props: any) => <SwipeContainer><HomeScreen {...props} /></SwipeContainer>;
+const SwipeChat = (props: any) => <SwipeContainer><ChatScreen {...props} /></SwipeContainer>;
+const SwipeJournal = (props: any) => <SwipeContainer><JournalScreen {...props} /></SwipeContainer>;
+const SwipeInsights = (props: any) => <SwipeContainer><DashboardScreen {...props} /></SwipeContainer>;
+const SwipeProfile = (props: any) => <SwipeContainer><ProfileStack {...props} /></SwipeContainer>;
 
 function MainTabs(): React.ReactElement {
   const { t } = useLanguage();
@@ -70,7 +74,7 @@ function MainTabs(): React.ReactElement {
     >
       <Tab.Screen
         name="Home"
-        component={HomeScreen}
+        component={SwipeHome}
         options={{
           tabBarIcon: ({ focused, color }) => <HomeIcon focused={focused} color={color} size={24} />,
           tabBarLabel: t.tabs.home
@@ -78,7 +82,7 @@ function MainTabs(): React.ReactElement {
       />
       <Tab.Screen
         name="Chat"
-        component={ChatScreen}
+        component={SwipeChat}
         options={{
           tabBarIcon: ({ focused, color }) => <ChatIcon focused={focused} color={color} size={24} />,
           tabBarLabel: t.tabs.chat
@@ -86,7 +90,7 @@ function MainTabs(): React.ReactElement {
       />
       <Tab.Screen
         name="Journal"
-        component={JournalScreen}
+        component={SwipeJournal}
         options={{
           tabBarIcon: ({ focused, color }) => <JournalIcon focused={focused} color={color} size={24} />,
           tabBarLabel: t.tabs.journal
@@ -94,7 +98,7 @@ function MainTabs(): React.ReactElement {
       />
       <Tab.Screen
         name="Insights"
-        component={DashboardScreen}
+        component={SwipeInsights}
         options={{
           tabBarIcon: ({ focused, color }) => <InsightsIcon focused={focused} color={color} size={24} />,
           tabBarLabel: t.tabs.insights
@@ -102,7 +106,7 @@ function MainTabs(): React.ReactElement {
       />
       <Tab.Screen
         name="Profile"
-        component={ProfileStack}
+        component={SwipeProfile}
         options={{
           tabBarIcon: ({ focused, color }) => <ProfileIcon focused={focused} color={color} size={24} />,
           tabBarLabel: t.tabs.profile

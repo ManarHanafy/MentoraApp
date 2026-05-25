@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon, CheckCircleSolidIcon } from '../components/Icons';
 import { colors } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
 import type { SupportedLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const LANGUAGES: { code: SupportedLanguage; label: string; sublabel: string; flag: string }[] = [
   { code: 'en', label: 'English', sublabel: 'English', flag: '🇬🇧' },
@@ -14,14 +15,15 @@ const LANGUAGES: { code: SupportedLanguage; label: string; sublabel: string; fla
 export function LanguageScreen(): React.ReactElement {
   const navigation = useNavigation();
   const { language, setLanguage, t, isRTL } = useLanguage();
+  const insets = useSafeAreaInsets();
 
   const choose = async (code: SupportedLanguage) => {
     await setLanguage(code);
   };
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={s.darkHeader}>
+    <View style={s.safeArea}>
+      <View style={[s.darkHeader, { paddingTop: insets.top + 16 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backButton}>
           <ArrowLeftIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -60,7 +62,7 @@ export function LanguageScreen(): React.ReactElement {
           {t.languageScreen.restartNote}
         </Text>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

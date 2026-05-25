@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Switch, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../theme';
 import {
@@ -8,11 +8,13 @@ import {
 } from '../components/Icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function SettingsScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const { t, language, isRTL } = useLanguage();
   const { resetOnboarding } = useAuth();
+  const insets = useSafeAreaInsets();
   const [isLocked, setIsLocked] = useState(true);
   const [resetting, setResetting] = useState(false);
 
@@ -55,8 +57,8 @@ export function SettingsScreen(): React.ReactElement {
   };
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={s.darkHeader}>
+    <View style={s.safeArea}>
+      <View style={[s.darkHeader, { paddingTop: insets.top + 16 }, isRTL && { flexDirection: 'row-reverse' }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backButton}>
           <ArrowLeftIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -135,7 +137,7 @@ export function SettingsScreen(): React.ReactElement {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

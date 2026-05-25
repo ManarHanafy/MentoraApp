@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon } from '../components/Icons';
 import { colors } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const FAQS_EN = [
   { q: 'How does Mentora AI work?', a: 'Mentora uses advanced AI to analyze your journal entries and chat messages, then recommends personalized wellness exercises tailored to your emotional state and needs.' },
@@ -28,10 +29,11 @@ export function HelpCenterScreen(): React.ReactElement {
   const { t, isRTL, language } = useLanguage();
   const faqs = language === 'ar' ? FAQS_AR : FAQS_EN;
   const textDir = isRTL ? 'right' as const : 'left' as const;
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={[s.darkHeader, isRTL && { flexDirection: 'row-reverse' }]}>
+    <View style={s.safeArea}>
+      <View style={[s.darkHeader, { paddingTop: insets.top + 16 }, isRTL && { flexDirection: 'row-reverse' }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backButton}>
           <ArrowLeftIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -79,7 +81,7 @@ export function HelpCenterScreen(): React.ReactElement {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -22,6 +22,7 @@ import { ExerciseService } from '../services/exerciseService';
 import { MoodService } from '../services/moodService';
 import { ChatService } from '../services/chatService';
 import { ActivityIndicator, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE_URL } from '../config/env';
 
 // Sad -> Happy
@@ -36,6 +37,7 @@ export function HomeScreen(): React.ReactElement {
   const navigation = useNavigation();
   const { userName } = useAuth();
   const { t, isRTL } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [moodLevel, setMoodLevel] = useState(3);
   const [saySomethingVisible, setSaySomethingVisible] = useState(false);
   const [moodMessage, setMoodMessage] = useState('');
@@ -184,7 +186,7 @@ export function HomeScreen(): React.ReactElement {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       accessibilityLabel="Home screen"

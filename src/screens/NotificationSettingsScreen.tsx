@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Switch, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon, BellIcon } from '../components/Icons';
 import { colors, typography } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
+import { NotificationService } from '../services/notificationService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function NotificationSettingsScreen(): React.ReactElement {
   const navigation = useNavigation();
   const { t, isRTL, language } = useLanguage();
+  const insets = useSafeAreaInsets();
   
   const [dailyReminder, setDailyReminder] = useState(true);
   const [aiRecs, setAiRecs] = useState(true);
@@ -30,13 +33,18 @@ export function NotificationSettingsScreen(): React.ReactElement {
     setter(val);
     await AsyncStorage.setItem(key, String(val));
     await AsyncStorage.setItem('@mentora_notifications', String(val || dailyReminder || aiRecs));
+    
+    // Reschedule dynamic notifications
+    setTimeout(async () => {
+      await NotificationService.scheduleDailyReminders(language);
+    }, 100);
   };
 
   const textDir = isRTL ? 'right' as const : 'left' as const;
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={[s.darkHeader, isRTL && { flexDirection: 'row-reverse' }]}>
+    <View style={s.safeArea}>
+      <View style={[s.darkHeader, { paddingTop: insets.top + 16 }, isRTL && { flexDirection: 'row-reverse' }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backButton}>
           <ArrowLeftIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -111,7 +119,7 @@ export function NotificationSettingsScreen(): React.ReactElement {
           />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

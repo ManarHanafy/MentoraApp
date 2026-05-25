@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon } from '../components/Icons';
 import { colors } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SECTIONS_EN = [
   {
@@ -80,10 +81,11 @@ export function PrivacyPolicyScreen(): React.ReactElement {
   const { t, isRTL, language } = useLanguage();
   const sections = language === 'ar' ? SECTIONS_AR : SECTIONS_EN;
   const textDir = isRTL ? 'right' as const : 'left' as const;
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={[s.darkHeader, isRTL && { flexDirection: 'row-reverse' }]}>
+    <View style={s.safeArea}>
+      <View style={[s.darkHeader, { paddingTop: insets.top + 16 }, isRTL && { flexDirection: 'row-reverse' }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backButton}>
           <ArrowLeftIcon size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -119,7 +121,7 @@ export function PrivacyPolicyScreen(): React.ReactElement {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

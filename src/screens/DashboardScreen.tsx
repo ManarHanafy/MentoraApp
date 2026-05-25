@@ -6,6 +6,7 @@ import { Exercise, ExerciseService } from '../services/exerciseService';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL } from '../config/env';
 import { useLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type TabType = 'Overview' | 'Trends' | 'Triggers' | 'Goals';
 
@@ -65,6 +66,7 @@ export function DashboardScreen(): React.ReactElement {
   const [completedExercises, setCompletedExercises] = useState<any[]>([]);
   const [goalsList, setGoalsList] = useState<any[]>([]);
   const { t, isRTL, language } = useLanguage();
+  const insets = useSafeAreaInsets();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -604,23 +606,21 @@ export function DashboardScreen(): React.ReactElement {
   };
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={s.container}>
-        {renderTabs()}
-        {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : (
-          <>
-            {activeTab === 'Overview' && renderOverview()}
-            {activeTab === 'Trends' && renderTrends()}
-            {activeTab === 'Triggers' && renderTriggers()}
-            {activeTab === 'Goals' && renderGoals()}
-          </>
-        )}
-      </View>
-    </SafeAreaView>
+    <View style={[s.container, { paddingTop: insets.top }]}>
+      {renderTabs()}
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <>
+          {activeTab === 'Overview' && renderOverview()}
+          {activeTab === 'Trends' && renderTrends()}
+          {activeTab === 'Triggers' && renderTriggers()}
+          {activeTab === 'Goals' && renderGoals()}
+        </>
+      )}
+    </View>
   );
 }
 
@@ -630,7 +630,7 @@ const s = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingTop: 8,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderColor: '#F1F5F9',

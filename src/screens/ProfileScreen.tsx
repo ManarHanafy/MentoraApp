@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, typography } from '../theme';
 import {
@@ -7,11 +7,13 @@ import {
 } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function ProfileScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const { userName, logout } = useAuth();
   const { t, isRTL, language } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
   const handleLogout = async () => {
@@ -23,8 +25,8 @@ export function ProfileScreen(): React.ReactElement {
   const defaultName = language === 'ar' ? 'منار محمد حنفي' : 'Manar Mohamed Hanafy';
 
   return (
-    <SafeAreaView style={s.safeArea}>
-      <View style={s.darkHeader}>
+    <View style={s.safeArea}>
+      <View style={[s.darkHeader, { paddingTop: insets.top + 16 }]}>
         <View style={s.headerContent}>
           <View style={s.avatarContainer}>
             <UserCircleIcon size={48} color={colors.primary} />
@@ -97,7 +99,7 @@ export function ProfileScreen(): React.ReactElement {
         </View>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -265,12 +265,12 @@ export function ChatScreen(): React.ReactElement {
 
         // React based on riskLevel returned by the API
         // API returns: 'normal' | 'elevated' | 'crisis' — no suggestedAction field
-        const riskLevel: string = response.riskLevel || response.risk_level || 'normal';
+        const riskLevel: string = (response.riskLevel || response.risk_level || 'normal').toLowerCase().trim();
 
-        if (riskLevel === 'crisis') {
+        if (riskLevel === 'crisis' || riskLevel === 'danger') {
           handleCrisis(currentChatId);
-        } else if (riskLevel === 'elevated') {
-          // Elevated: fetch exercises in background, then show yellow bubble
+        } else if (riskLevel === 'elevated' || riskLevel === 'high' || riskLevel === 'warning') {
+          // Elevated/high/warning: fetch exercises in background, then show yellow bubble
           ChatService.summarizeChat(currentChatId)
             .then((summaryData) => {
               const exercises = summaryData?._exercises || [];
@@ -299,16 +299,21 @@ export function ChatScreen(): React.ReactElement {
       const result = await ChatService.endChat(id);
       const exercises = result?._exercises || [];
 
-      const exerciseCount = exercises.length;
-      const englishInfo = `We've reached the end of our session. I've suggested ${exerciseCount} exercises for you based on our conversation. You can find them on your Home screen or under the notifications bell. Thank you for sharing with me today.`;
-      addMessage('ai', englishInfo);
+      // Clear the previous messages immediately so they are no longer visible!
+      setMessages([
+        {
+          id: 'welcome_' + Date.now(),
+          text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
+          sender: 'ai',
+        }
+      ]);
 
       // Always save the flag and specify if we got exercises or not
       const flagValue = exercises.length > 0 ? 'exercises' : 'none';
       const alertKey = await ChatService.getUserKey('@session_complete_alert');
       await AsyncStorage.setItem(alertKey, flagValue);
 
-      // Helper to clear historical messages and start a fresh new session
+      // Helper to start a fresh new session
       const startFreshSession = async () => {
         setIsThinking(true);
         try {
@@ -319,13 +324,6 @@ export function ChatScreen(): React.ReactElement {
             isEndedRef.current = false;
             setIsCrisis(false);
             isCrisisRef.current = false;
-            setMessages([
-              {
-                id: 'welcome_' + Date.now(),
-                text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
-                sender: 'ai',
-              }
-            ]);
           }
         } catch (err) {
           console.error('Failed to auto-start fresh session after end:', err);
@@ -334,7 +332,10 @@ export function ChatScreen(): React.ReactElement {
         }
       };
 
-      // If ChatScreen IS still visible, show alert directly
+      // Start the fresh session in the background
+      await startFreshSession();
+
+      // Show the complete alert
       if (exercises.length > 0) {
         Alert.alert(
           'Session Complete 🌿',
@@ -344,15 +345,11 @@ export function ChatScreen(): React.ReactElement {
               text: 'View Exercises', 
               onPress: () => {
                 navigation.navigate('Exercises', { openSuggested: true });
-                startFreshSession();
               } 
             },
             { 
               text: 'Later', 
-              style: 'cancel',
-              onPress: () => {
-                startFreshSession();
-              }
+              style: 'cancel'
             }
           ]
         );
@@ -360,12 +357,7 @@ export function ChatScreen(): React.ReactElement {
         Alert.alert(
           'Session Ended 🌿',
           'Your conversation session has been completed and summarized.',
-          [{ 
-            text: 'OK', 
-            onPress: () => {
-              startFreshSession();
-            } 
-          }]
+          [{ text: 'OK' }]
         );
       }
     } catch (e: any) {

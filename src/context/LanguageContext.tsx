@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { I18nManager } from 'react-native';
 import { translations, TranslationKeys } from '../localization/translations';
+import { NotificationService } from '../services/notificationService';
 
 const LANG_KEY = '@mentora_app_language';
 
@@ -22,6 +23,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }): R
   // Load saved language on mount
   useEffect(() => {
     AsyncStorage.getItem(LANG_KEY).then((stored) => {
+      const activeLang: SupportedLanguage = (stored === 'ar' || stored === 'en') ? stored : 'en';
       if (stored === 'ar' || stored === 'en') {
         setLang(stored);
         const shouldBeRTL = stored === 'ar';
@@ -32,6 +34,13 @@ export function LanguageProvider({ children }: { children: React.ReactNode }): R
           console.warn('I18nManager error during load:', e);
         }
       }
+      
+      // Initialize notification system
+      NotificationService.requestPermissions().then((granted) => {
+        if (granted) {
+          NotificationService.scheduleDailyReminders(activeLang);
+        }
+      });
     });
   }, []);
 
@@ -51,6 +60,13 @@ export function LanguageProvider({ children }: { children: React.ReactNode }): R
     }
     
     setLang(lang);
+
+    // Reschedule in the new language
+    NotificationService.requestPermissions().then((granted) => {
+      if (granted) {
+        NotificationService.scheduleDailyReminders(lang);
+      }
+    });
   }, []);
 
   const t = translations[language];
