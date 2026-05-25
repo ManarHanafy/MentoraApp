@@ -37,10 +37,10 @@ const isTokenExpired = (token: string): boolean => {
     
     const payload = JSON.parse(decoded);
     if (payload && typeof payload.exp === 'number') {
-      const bufferTime = 300; // 5 minutes buffer before actual expiration
-      const isExpired = payload.exp < (Date.now() / 1000) + bufferTime;
+      const bufferTime = 60; // 60 seconds buffer — only refresh when genuinely close to expiry
+      const isExpired = payload.exp < (Date.now() / 1000) - bufferTime;
       if (isExpired) {
-        console.log('JWT Token is expired. Exp time:', payload.exp, 'Current time:', Date.now() / 1000);
+        console.log('[AuthHelper] JWT Token is expired. Exp:', payload.exp, 'Now:', Math.floor(Date.now() / 1000));
       }
       return isExpired;
     }

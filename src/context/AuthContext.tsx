@@ -49,6 +49,79 @@ const defaultState: AuthState = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const extractNameFromToken = (token: string): string => {
+  try {
+    if (!token || token.startsWith('mock_')) return '';
+    const parts = token.split('.');
+    if (parts.length !== 3) return '';
+
+    let payloadStr = parts[1];
+    payloadStr = payloadStr.replace(/-/g, '+').replace(/_/g, '/');
+    while (payloadStr.length % 4) {
+      payloadStr += '=';
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let decoded = '';
+    let buffer = 0;
+    let bits = 0;
+
+    for (let i = 0; i < payloadStr.length; i++) {
+      const char = payloadStr.charAt(i);
+      const idx = chars.indexOf(char);
+      if (idx === -1 || char === '=') continue;
+
+      buffer = (buffer << 6) | idx;
+      bits += 6;
+
+      if (bits >= 8) {
+        bits -= 8;
+        const byte = (buffer >> bits) & 0xff;
+        decoded += String.fromCharCode(byte);
+      }
+    }
+
+    const payload = JSON.parse(decoded);
+    // Standard JWT Claims for user names
+    const claims = [
+      'unique_name',
+      'name',
+      'given_name',
+      'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name',
+      'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname'
+    ];
+
+    for (const claim of claims) {
+      if (payload[claim] && typeof payload[claim] === 'string' && payload[claim].trim()) {
+        const val = payload[claim].trim();
+        // Skip GUIDs or email addresses that might be inside these claims
+        if (!val.includes('@') && val.length < 50) {
+          return val;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[AuthContext] Failed to parse token for name:', e);
+  }
+  return '';
+};
+
+const extractName = (data: any, email: string): string => {
+  if (data) {
+    if (data.token) {
+      const tokenName = extractNameFromToken(data.token);
+      if (tokenName) return tokenName;
+    }
+    const responseName = data.userName || data.username || data.name || data.fullName || 
+      (data.firstName ? (data.lastName ? `${data.firstName} ${data.lastName}` : data.firstName) : '');
+    if (typeof responseName === 'string' && responseName.trim()) {
+      return responseName.trim();
+    }
+  }
+  const usernamePart = email.split('@')[0];
+  return usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const [state, setState] = useState<AuthState>(defaultState);
   const [noAccountMessageVisible, setNoAccountMessageVisible] = useState(false);
@@ -104,8 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         const { AuthService } = require('../services/authService');
         const data = await AuthService.login(email, password);
         if (data && data.token) {
-          const usernamePart = email.split('@')[0];
-          const name = usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
+          const name = extractName(data, email);
 
           await AsyncStorage.multiSet([
             [LOGGED_IN_KEY, 'true'],
@@ -147,12 +219,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     async (provider: 'google' | 'facebook', verifiedEmail: string): Promise<{ success: boolean; message?: string }> => {
       try {
         const usernamePart = verifiedEmail.split('@')[0];
-        const name = usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
+        const initialName = usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
         const email = verifiedEmail;
         // Deterministic password for the auto-created social account
         const autoPassword = `Mentora_${usernamePart}_Social!1`;
 
         let token = '';
+        let resolvedName = initialName;
         try {
           const { API_BASE_URL } = require('../config/env');
           const { AuthService } = require('../services/authService');
@@ -162,6 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
             const loginRes = await AuthService.login(email, autoPassword);
             if (loginRes?.token) {
               token = loginRes.token;
+              resolvedName = extractName(loginRes, email);
             }
           } catch {
             // Login failed — account doesn't exist yet, register first
@@ -173,7 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
               await AuthService.register({
                 username: usernamePart,
                 email,
-                firstName: name,
+                firstName: initialName,
                 lastName: 'User',
                 password: autoPassword,
                 phoneNumber: '',
@@ -188,6 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
               const loginRes2 = await AuthService.login(email, autoPassword);
               if (loginRes2?.token) {
                 token = loginRes2.token;
+                resolvedName = extractName(loginRes2, email);
               }
             } catch (loginErr) {
               console.warn('Social login: auto-login after register failed:', loginErr);
@@ -207,7 +282,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           [HAS_ACCOUNT_KEY, 'true'],
           [TOKEN_KEY, token],
           [USER_EMAIL_KEY, email],
-          [USER_NAME_KEY, name],
+          [USER_NAME_KEY, resolvedName],
         ]);
 
         await AsyncStorage.setItem(userOnboardingKey, hasOnboarded ? 'true' : 'false');
@@ -220,7 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           ...s, 
           isLoggedIn: true, 
           email: email, 
-          userName: name,
+          userName: resolvedName,
           hasAccount: true,
           hasCompletedOnboarding: hasOnboarded,
         }));

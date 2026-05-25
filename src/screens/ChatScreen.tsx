@@ -87,53 +87,54 @@ export function ChatScreen(): React.ReactElement {
         let lastChatCrisis = false;
 
         if (recentChats && recentChats.length > 0) {
-          // Fetch detailed messages for each chat session in parallel
-          const detailsPromises = recentChats.map((c: any) => ChatService.getChatDetails(c.id));
-          const detailsList = await Promise.all(detailsPromises);
-          
-          // Reversing detailsList because recentChats is sorted newest-to-oldest,
-          // so reversing it gives us oldest-to-newest for chronological rendering.
-          const oldestToNewestDetails = detailsList.filter(d => d !== null).reverse();
-          
-          oldestToNewestDetails.forEach((details: any) => {
-            if (details.messages && details.messages.length > 0) {
-              const mapped: Message[] = details.messages.map((m: any) => ({
-                id: (m.id || Math.random()).toString(),
-                text: m.content || m.text || m.Message || '',
-                sender: m.role === 'assistant' ? 'ai' : 'user',
-              }));
-              allMappedMessages = [...allMappedMessages, ...mapped];
-            }
-          });
-
-          // The newest chat session is the first one in the recentChats list
           const latestChat = recentChats[0];
           activeChatId = latestChat.id.toString();
           lastChatEnded = latestChat.isEnded;
           lastChatCrisis = latestChat.riskLevel === 'crisis';
+
+          // Only load history if the current session is NOT ended!
+          if (!lastChatEnded) {
+            const detailsPromises = recentChats.map((c: any) => ChatService.getChatDetails(c.id));
+            const detailsList = await Promise.all(detailsPromises);
+            
+            const oldestToNewestDetails = detailsList.filter(d => d !== null).reverse();
+            
+            oldestToNewestDetails.forEach((details: any) => {
+              if (details.messages && details.messages.length > 0) {
+                const mapped: Message[] = details.messages.map((m: any) => ({
+                  id: (m.id || Math.random()).toString(),
+                  text: m.content || m.text || m.Message || '',
+                  sender: m.role === 'assistant' ? 'ai' : 'user',
+                }));
+                allMappedMessages = [...allMappedMessages, ...mapped];
+              }
+            });
+          }
         }
 
-        if (allMappedMessages.length > 0) {
+        if (allMappedMessages.length > 0 && !lastChatEnded) {
           setMessages(allMappedMessages);
         } else {
-          // No chat sessions at all -> initialize with welcome message
+          // Ended session or new user -> start with empty/fresh welcome
           setMessages([
             {
-              id: 'welcome',
+              id: 'welcome_' + Date.now(),
               text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
               sender: 'ai',
             }
           ]);
         }
 
-        if (activeChatId) {
+        if (activeChatId && !lastChatEnded) {
           setChatId(activeChatId);
-          setIsEnded(lastChatEnded);
+          setIsEnded(false);
           setIsCrisis(lastChatCrisis);
         } else {
-          // Brand new user with zero chats -> start a new chat session on the server
+          // Start a new chat session on the server
           const newId = await ChatService.startChat();
           if (newId) setChatId(newId);
+          setIsEnded(false);
+          setIsCrisis(false);
         }
       } catch (e) {
         console.error('Init chat history error', e);
@@ -307,21 +308,64 @@ export function ChatScreen(): React.ReactElement {
       const alertKey = await ChatService.getUserKey('@session_complete_alert');
       await AsyncStorage.setItem(alertKey, flagValue);
 
+      // Helper to clear historical messages and start a fresh new session
+      const startFreshSession = async () => {
+        setIsThinking(true);
+        try {
+          const newId = await ChatService.startChat();
+          if (newId) {
+            setChatId(newId);
+            setIsEnded(false);
+            isEndedRef.current = false;
+            setIsCrisis(false);
+            isCrisisRef.current = false;
+            setMessages([
+              {
+                id: 'welcome_' + Date.now(),
+                text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
+                sender: 'ai',
+              }
+            ]);
+          }
+        } catch (err) {
+          console.error('Failed to auto-start fresh session after end:', err);
+        } finally {
+          setIsThinking(false);
+        }
+      };
+
       // If ChatScreen IS still visible, show alert directly
       if (exercises.length > 0) {
         Alert.alert(
           'Session Complete 🌿',
           'Mentora has suggested some exercises based on our conversation.',
           [
-            { text: 'View Exercises', onPress: () => navigation.navigate('Exercises', { openSuggested: true }) },
-            { text: 'Later', style: 'cancel' }
+            { 
+              text: 'View Exercises', 
+              onPress: () => {
+                navigation.navigate('Exercises', { openSuggested: true });
+                startFreshSession();
+              } 
+            },
+            { 
+              text: 'Later', 
+              style: 'cancel',
+              onPress: () => {
+                startFreshSession();
+              }
+            }
           ]
         );
       } else {
         Alert.alert(
           'Session Ended 🌿',
           'Your conversation session has been completed and summarized.',
-          [{ text: 'OK' }]
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              startFreshSession();
+            } 
+          }]
         );
       }
     } catch (e: any) {

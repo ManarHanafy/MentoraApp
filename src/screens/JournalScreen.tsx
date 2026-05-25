@@ -25,10 +25,11 @@ import { useLanguage } from '../context/LanguageContext';
 // Always fetch fresh token from storage (don't cache across sessions)
 const getApiToken = async (): Promise<string> => {
   try {
-    const token = await AsyncStorage.getItem('@mentora_token');
-    return token ? token.trim() : '';
+    const { getOrRefreshToken } = require('../services/authHelper');
+    return await getOrRefreshToken();
   } catch {
-    return '';
+    const token = await AsyncStorage.getItem('@mentora_auth_token');
+    return token ? token.trim() : '';
   }
 };
 
