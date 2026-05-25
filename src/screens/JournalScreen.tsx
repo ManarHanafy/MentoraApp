@@ -98,7 +98,7 @@ export function JournalScreen(): React.ReactElement {
           setEntries([]); // Clear state if no stored entries exist for this user!
         }
       } catch (e) {
-        console.error('Failed to load journals', e);
+        console.warn('Failed to load journals', e);
         setEntries([]);
       }
     })();
@@ -237,7 +237,7 @@ export function JournalScreen(): React.ReactElement {
         const statusCode = response.status;
         let errBody = '';
         try { errBody = await response.text(); } catch {}
-        console.error(`Journal AI failed — HTTP ${statusCode}:`, errBody);
+        console.warn(`Journal AI failed — HTTP ${statusCode}:`, errBody);
         Alert.alert(
           language === 'ar' ? 'فشل التحليل' : 'Analysis Failed',
           language === 'ar' ? 'خدمة الذكاء الاصطناعي غير متاحة حالياً. يرجى المحاولة مرة أخرى.' : 'The AI service is temporarily unavailable. Please try again in a moment.',
@@ -264,33 +264,17 @@ export function JournalScreen(): React.ReactElement {
       setEntries((prev) => {
         const updated = [newEntry, ...prev];
         getJournalKey().then(key =>
-          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.error)
+          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.warn)
         );
         return updated;
       });
     } catch (error) {
-      console.error('Failed to save entry to API:', error);
-      const defaultTitle = language === 'ar' ? 'بلا عنوان' : 'Untitled';
-      const fallbackEntry: JournalEntry = {
-        id: Date.now().toString(),
-        title: newTitle.trim() || defaultTitle,
-        preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
-        fullContent: newContent.trim(),
-        date: new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
-          month: 'short', day: 'numeric', year: 'numeric',
-          hour: 'numeric', minute: '2-digit',
-        }),
-        tags: [],
-        type: 'text',
-        locked: lockedChecked,
-      };
-      setEntries((prev) => {
-        const updated = [fallbackEntry, ...prev];
-        getJournalKey().then(key =>
-          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.error)
-        );
-        return updated;
-      });
+      console.warn('Failed to save entry to API:', error);
+      Alert.alert(
+        language === 'ar' ? 'فشل الحفظ' : 'Failed to Save',
+        language === 'ar' ? 'حدث خطأ أثناء حفظ اليومية. يرجى المحاولة مرة أخرى.' : 'An error occurred while saving the journal entry. Please try again.',
+        [{ text: t.common.ok, style: 'default' }]
+      );
     } finally {
       setIsSaving(false);
       closeWrite();

@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { EmailService } from '../services/emailService';
+
 import Svg, { Path } from 'react-native-svg';
 
 const MailIcon = () => (
@@ -65,17 +65,8 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-
-  // Verification & Validation States
   const [emailError, setEmailError] = useState('');
-  const [verificationVisible, setVerificationVisible] = useState(false);
-  const [verificationStep, setVerificationStep] = useState<'email' | 'code'>('code');
-  const [socialProvider, setSocialProvider] = useState<'google' | 'facebook' | null>(null);
-  const [socialEmail, setSocialEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [correctCode, setCorrectCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSendingCode, setIsSendingCode] = useState(false);
 
   const validateEmail = (text: string) => {
     setEmail(text);
@@ -117,77 +108,33 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
   };
 
   const handleSocialSignIn = (provider: 'google' | 'facebook') => {
-    setSocialProvider(provider);
-    setSocialEmail('');
-    setVerificationCode('');
-    setVerificationStep('email');
-    setVerificationVisible(true);
-  };
-
-  const sendSocialCode = async () => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!socialEmail || !re.test(socialEmail)) {
-      Alert.alert("Invalid Email", "Please enter a valid and authentic email address.");
-      return;
-    }
-
-    setIsSendingCode(true);
-    const generated = Math.floor(1000 + Math.random() * 9000).toString();
-    setCorrectCode(generated);
-    setVerificationCode('');
-
-    const res = await EmailService.sendOTP(socialEmail, generated, 'Mentora User');
-    setIsSendingCode(false);
-
-    if (res.success) {
-      setVerificationStep('code');
-      Alert.alert(
-        "Verification Code Sent 📲",
-        `We've sent a real 4-digit verification code to:\n📧 ${socialEmail}\n\nPlease check your email inbox.`,
-        [{ text: "OK" }]
-      );
-    } else {
-      Alert.alert(
-        "Email Send Failed ❌",
-        `Reason: ${res.error}\n\nFallback to offline verification. Code is logged to console or use '1234'.`,
-        [{ text: "Verify Offline", onPress: () => setVerificationStep('code') }]
-      );
-      console.log(`🔑 [MENTORA FALLBACK DEV] Code: ${generated}`);
-    }
-  };
-
-  const confirmVerification = async () => {
-    if (verificationCode !== correctCode && verificationCode !== '1234') {
-      Alert.alert("Invalid Code", "The code you entered is incorrect. Please try again.");
-      return;
-    }
-
-    setVerificationVisible(false);
-    setIsLoading(true);
-
-    try {
-      if (socialProvider) {
-        // Authenticate via social mock pipeline with their verified social email
-        const res = await loginWithSocial(socialProvider, socialEmail);
-        if (!res.success) {
-          Alert.alert("Social Login Failed", res.message || "An error occurred.");
+    // Prompt for social email then login directly — no OTP verification
+    Alert.prompt(
+      provider === 'google' ? 'Sign in with Google' : 'Sign in with Facebook',
+      'Enter the email address linked to your account:',
+      async (inputEmail) => {
+        if (!inputEmail) return;
+        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!re.test(inputEmail.trim())) {
+          Alert.alert('Invalid Email', 'Please enter a valid email address.');
+          return;
         }
-      } else {
-        // Normal Auth Pipeline
-        const result = await login(email, password);
-        if (!result.success) {
-          if (result.message === 'no_account') {
-            Alert.alert("Account Not Found", "We couldn't find an account with that email. Please sign up.");
-          } else {
-            Alert.alert("Login Failed", result.message || "Invalid credentials.");
+        setIsLoading(true);
+        try {
+          const res = await loginWithSocial(provider, inputEmail.trim());
+          if (!res.success) {
+            Alert.alert('Login Failed', res.message || 'An error occurred.');
           }
+        } catch (e: any) {
+          Alert.alert('Error', e.message || 'Social login failed.');
+        } finally {
+          setIsLoading(false);
         }
-      }
-    } catch (e: any) {
-      Alert.alert("Error", e.message || "Authentication failed.");
-    } finally {
-      setIsLoading(false);
-    }
+      },
+      'plain-text',
+      '',
+      'email-address'
+    );
   };
 
   return (
@@ -257,8 +204,8 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={s.signInButton} onPress={handleSignIn} disabled={isLoading || isSendingCode}>
-              {isLoading || isSendingCode ? (
+            <TouchableOpacity style={s.signInButton} onPress={handleSignIn} disabled={isLoading}>
+              {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <Text style={s.signInText}>Sign in</Text>
@@ -291,86 +238,7 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Verification & Social Email Modal */}
-      <Modal visible={verificationVisible} transparent animationType="fade">
-        <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            {verificationStep === 'email' ? (
-              <>
-                <Text style={s.modalTitle}>Social Account Email</Text>
-                <Text style={s.modalDesc}>
-                  Enter the email address of your {socialProvider === 'google' ? 'Google' : 'Facebook'} account. We will send a verification code to authenticate it.
-                </Text>
-                <View style={s.modalInputContainer}>
-                  <MailIcon />
-                  <TextInput
-                    style={s.modalTextInput}
-                    placeholder="name@example.com"
-                    placeholderTextColor="#A0AEC0"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={socialEmail}
-                    onChangeText={setSocialEmail}
-                  />
-                </View>
-                <View style={s.modalActions}>
-                  <TouchableOpacity 
-                    style={[s.modalBtn, { backgroundColor: '#E2E8F0' }]} 
-                    onPress={() => setVerificationVisible(false)}
-                    disabled={isSendingCode}
-                  >
-                    <Text style={{ color: '#161B22', fontWeight: 'bold' }}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[s.modalBtn, { backgroundColor: '#161B22' }]} 
-                    onPress={sendSocialCode}
-                    disabled={isSendingCode}
-                  >
-                    {isSendingCode ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
-                    ) : (
-                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Send Code</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={s.modalTitle}>Verify Your Email 📲</Text>
-                <Text style={s.modalDesc}>
-                  Enter the 4-digit code sent to your email to verify that your account is authentic.
-                </Text>
-                <TextInput
-                  style={s.codeBox}
-                  placeholder="0000"
-                  placeholderTextColor="#A0AEC0"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  value={verificationCode}
-                  onChangeText={setVerificationCode}
-                />
-                <View style={s.modalActions}>
-                  <TouchableOpacity 
-                    style={[s.modalBtn, { backgroundColor: '#E2E8F0' }]} 
-                    onPress={() => setVerificationVisible(false)}
-                  >
-                    <Text style={{ color: '#161B22', fontWeight: 'bold' }}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[s.modalBtn, { backgroundColor: '#161B22' }]} 
-                    onPress={confirmVerification}
-                  >
-                    <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Verify</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 18, textAlign: 'center' }}>
-                  🔧 Sandbox Tip: Code printed to console or use '1234' to skip
-                </Text>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+
     </SafeAreaView>
   );
 }

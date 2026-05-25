@@ -1,20 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../theme';
 import {
   ArrowLeftIcon, GlobeIcon, BellIcon, LockIcon, TrashIcon,
-  ChevronRightIcon, CheckCircleSolidIcon
+  ChevronRightIcon, CheckCircleSolidIcon, ClipboardIcon
 } from '../components/Icons';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 
 export function SettingsScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const { t, language, isRTL } = useLanguage();
+  const { resetOnboarding } = useAuth();
   const [isLocked, setIsLocked] = useState(true);
+  const [resetting, setResetting] = useState(false);
 
   const langLabel = language === 'ar' ? 'العربية' : 'English';
   const rowDir = isRTL ? 'row-reverse' as const : 'row' as const;
+
+  const handleResetOnboarding = () => {
+    Alert.alert(
+      isRTL ? 'إعادة تعيين الأسئلة' : 'Reset Onboarding',
+      isRTL 
+        ? 'هل أنت متأكد من رغبتك في إعادة تعيين إجاباتك وإعادة ملء الأسئلة؟'
+        : 'Are you sure you want to reset your answers and retake the onboarding questions?',
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        { 
+          text: isRTL ? 'نعم، إعادة تعيين' : 'Yes, Reset', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setResetting(true);
+              await resetOnboarding();
+              Alert.alert(
+                isRTL ? 'نجاح' : 'Success',
+                isRTL 
+                  ? 'تمت إعادة تعيين الأسئلة بنجاح. سيتم توجيهك الآن.'
+                  : 'Onboarding answers have been reset successfully. Redirecting you...'
+              );
+            } catch (err: any) {
+              Alert.alert(
+                isRTL ? 'خطأ' : 'Error',
+                isRTL ? 'فشل إعادة التعيين. يرجى المحاولة مرة أخرى.' : 'Failed to reset. Please try again.'
+              );
+            } finally {
+              setResetting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={s.safeArea}>
@@ -44,6 +82,26 @@ export function SettingsScreen(): React.ReactElement {
             <Text style={[s.itemText, isRTL && s.rtlItemText]}>{t.settings.notifications}</Text>
           </View>
           <ChevronRightIcon size={20} color={colors.textPrimary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[s.listItem, { flexDirection: rowDir }]} 
+          onPress={handleResetOnboarding}
+          disabled={resetting}
+        >
+          <View style={[s.itemLeft, { flexDirection: rowDir }]}>
+            <ClipboardIcon size={24} color={colors.textPrimary} />
+            <Text style={[s.itemText, isRTL && s.rtlItemText]}>
+              {isRTL ? 'إعادة تعيين الأسئلة' : 'Reset Onboarding'}
+            </Text>
+          </View>
+          <View style={[s.itemRight, { flexDirection: rowDir }]}>
+            {resetting ? (
+              <ActivityIndicator size="small" color="#161B22" />
+            ) : (
+              <ChevronRightIcon size={20} color={colors.textPrimary} />
+            )}
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={[s.listItem, { flexDirection: rowDir }]} onPress={() => navigation.navigate('ChangePassword')}>

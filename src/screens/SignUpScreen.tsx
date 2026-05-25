@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, SafeAreaView, Image, Alert, Modal, FlatList, ActivityIndicator
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { EmailService } from '../services/emailService';
+
 import Svg, { Path, Circle } from 'react-native-svg';
 
 const MailIcon = () => (
@@ -53,10 +53,6 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
   
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSendingCode, setIsSendingCode] = useState(false);
-  const [verificationVisible, setVerificationVisible] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [correctCode, setCorrectCode] = useState('');
 
   // Validation States
   const [emailError, setEmailError] = useState('');
@@ -113,7 +109,7 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
     }
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!re.test(email)) {
-      Alert.alert("Invalid Email", "Please enter a valid and authentic email address.");
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
       return;
     }
     if (password !== confirmPassword) {
@@ -125,40 +121,7 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
       return;
     }
 
-    setIsSendingCode(true);
-    // Generate random 4-digit code
-    const generated = Math.floor(1000 + Math.random() * 9000).toString();
-    setCorrectCode(generated);
-    setVerificationCode('');
-
-    // Send real email via EmailJS
-    const res = await EmailService.sendOTP(email, generated, name);
-    setIsSendingCode(false);
-
-    if (res.success) {
-      setVerificationVisible(true);
-      Alert.alert(
-        "Verification Code Sent 📲",
-        `We've sent a real 4-digit verification code to:\n📧 ${email}\n\nPlease check your email inbox.`,
-        [{ text: "OK" }]
-      );
-    } else {
-      Alert.alert(
-        "Email Send Failed ❌",
-        `Reason: ${res.error}\n\nFallback to offline verification. Code is logged to console or use '1234'.`,
-        [{ text: "Verify Offline", onPress: () => setVerificationVisible(true) }]
-      );
-      console.log(`🔑 [MENTORA FALLBACK DEV] Code: ${generated}`);
-    }
-  };
-
-  const confirmVerification = async () => {
-    if (verificationCode !== correctCode && verificationCode !== '1234') {
-      Alert.alert("Invalid Code", "The code you entered is incorrect. Please try again.");
-      return;
-    }
-
-    setVerificationVisible(false);
+    // Register directly — no email verification step
     setIsLoading(true);
     try {
       await signUp({ email, password, name, phone, dob, gender });
@@ -275,8 +238,8 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
             </View>
             {confirmPasswordError ? <Text style={s.errorHint}>{confirmPasswordError}</Text> : null}
 
-            <TouchableOpacity style={s.signUpButton} onPress={handleSignUp} disabled={isLoading || isSendingCode}>
-              {isLoading || isSendingCode ? (
+            <TouchableOpacity style={s.signUpButton} onPress={handleSignUp} disabled={isLoading}>
+              {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <Text style={s.signUpText}>Sign Up</Text>
@@ -317,43 +280,7 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
         </TouchableOpacity>
       </Modal>
 
-      {/* Verification Code Modal */}
-      <Modal visible={verificationVisible} transparent animationType="fade">
-        <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            <Text style={s.modalTitle}>Verify Your Email 📲</Text>
-            <Text style={s.modalDesc}>
-              Enter the 4-digit code sent to your phone or email to verify that your account is authentic.
-            </Text>
-            <TextInput
-              style={s.codeBox}
-              placeholder="0000"
-              placeholderTextColor="#A0AEC0"
-              keyboardType="number-pad"
-              maxLength={4}
-              value={verificationCode}
-              onChangeText={setVerificationCode}
-            />
-            <View style={s.modalActions}>
-              <TouchableOpacity 
-                style={[s.modalBtn, { backgroundColor: '#E2E8F0' }]} 
-                onPress={() => setVerificationVisible(false)}
-              >
-                <Text style={{ color: '#161B22', fontWeight: 'bold' }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[s.modalBtn, { backgroundColor: '#161B22' }]} 
-                onPress={confirmVerification}
-              >
-                <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Verify</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 18, textAlign: 'center' }}>
-              🔧 Sandbox Tip: Code printed to console or use '1234' to skip
-            </Text>
-          </View>
-        </View>
-      </Modal>
+
     </SafeAreaView>
   );
 }

@@ -72,7 +72,7 @@ export const getOrRefreshToken = async (): Promise<string> => {
     }
     return token || '';
   } catch (e) {
-    console.error('[AuthHelper] Failed to refresh token silently:', e);
+    console.warn('[AuthHelper] Failed to refresh token silently:', e);
     // Return whatever token we have as fallback
     const fallbackToken = await AsyncStorage.getItem('@mentora_auth_token');
     return fallbackToken || '';

@@ -43,7 +43,7 @@ export const AuthService = {
       }
       throw new Error(errorMessage);
     } catch (e) {
-      console.error('Login error', e);
+      console.warn('Login error', e);
       throw e;
     }
   },
@@ -96,7 +96,7 @@ export const AuthService = {
       }
       throw new Error(errorMessage);
     } catch (e) {
-      console.error('Registration error', e);
+      console.warn('Registration error', e);
       throw e;
     }
   }
