@@ -17,10 +17,24 @@ export interface ChatSession {
 }
 
 const getAuthToken = async (): Promise<string> => {
-  return await AsyncStorage.getItem('@mentora_auth_token') || '';
+  try {
+    const { getOrRefreshToken } = require('./authHelper');
+    return await getOrRefreshToken();
+  } catch {
+    return await AsyncStorage.getItem('@mentora_auth_token') || '';
+  }
 };
 
 export const ChatService = {
+  getUserKey: async (baseKey: string): Promise<string> => {
+    try {
+      const email = await AsyncStorage.getItem('@mentora_user_email');
+      return email ? `${baseKey}_${email.trim().toLowerCase()}` : baseKey;
+    } catch {
+      return baseKey;
+    }
+  },
+
   /** GET /Chats?pageSize=1 — returns the most recent chat or null */
   getLatestChat: async (): Promise<any | null> => {
     try {
@@ -211,8 +225,11 @@ export const ChatService = {
   /** Check active chat session exit time and finalize if timed out */
   checkAndFinalizeTimeout: async (timeoutMs: number = 5 * 60 * 1000): Promise<boolean> => {
     try {
-      const activeChatId = await AsyncStorage.getItem('@mentora_active_chat_id');
-      const exitTimeStr = await AsyncStorage.getItem('@chat_exit_time');
+      const activeChatIdKey = await ChatService.getUserKey('@mentora_active_chat_id');
+      const exitTimeKey = await ChatService.getUserKey('@chat_exit_time');
+
+      const activeChatId = await AsyncStorage.getItem(activeChatIdKey);
+      const exitTimeStr = await AsyncStorage.getItem(exitTimeKey);
       
       if (activeChatId && exitTimeStr) {
         const exitTime = parseInt(exitTimeStr, 10);
@@ -220,15 +237,16 @@ export const ChatService = {
         if (elapsed >= timeoutMs) {
           console.log(`Chat session ${activeChatId} timed out. Finalizing...`);
           // Clear keys FIRST to prevent duplicate calls
-          await AsyncStorage.removeItem('@mentora_active_chat_id');
-          await AsyncStorage.removeItem('@chat_exit_time');
+          await AsyncStorage.removeItem(activeChatIdKey);
+          await AsyncStorage.removeItem(exitTimeKey);
           
           const result = await ChatService.endChat(activeChatId);
           const exercises = result?._exercises || [];
           
           // Set flag to notify components
           const flagValue = exercises.length > 0 ? 'exercises' : 'none';
-          await AsyncStorage.setItem('@session_complete_alert', flagValue);
+          const alertKey = await ChatService.getUserKey('@session_complete_alert');
+          await AsyncStorage.setItem(alertKey, flagValue);
           return true;
         }
       }

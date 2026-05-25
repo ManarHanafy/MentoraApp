@@ -6,6 +6,7 @@ import { View, Text } from 'react-native';
 import { colors, typography } from '../theme';
 import { styles } from './AppNavigator.style';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   LoginScreen,
   SignUpScreen,
@@ -19,6 +20,12 @@ import {
   SettingsScreen,
   EditProfileScreen,
   ExercisesScreen,
+  LanguageScreen,
+  HelpCenterScreen,
+  PrivacyPolicyScreen,
+  NotificationSettingsScreen,
+  ChangePasswordScreen,
+  DeleteAccountScreen,
 } from '../screens';
 import { HomeIcon, ChatIcon, JournalIcon, InsightsIcon, ProfileIcon } from '../components/Icons';
 
@@ -32,6 +39,12 @@ function ProfileStack(): React.ReactElement {
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Language" component={LanguageScreen} />
+      <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
     </Stack.Navigator>
   );
 }
@@ -39,6 +52,7 @@ function ProfileStack(): React.ReactElement {
 
 
 function MainTabs(): React.ReactElement {
+  const { t } = useLanguage();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -59,7 +73,7 @@ function MainTabs(): React.ReactElement {
         component={HomeScreen}
         options={{
           tabBarIcon: ({ focused, color }) => <HomeIcon focused={focused} color={color} size={24} />,
-          tabBarLabel: 'Home'
+          tabBarLabel: t.tabs.home
         }}
       />
       <Tab.Screen
@@ -67,7 +81,7 @@ function MainTabs(): React.ReactElement {
         component={ChatScreen}
         options={{
           tabBarIcon: ({ focused, color }) => <ChatIcon focused={focused} color={color} size={24} />,
-          tabBarLabel: 'Chat'
+          tabBarLabel: t.tabs.chat
         }}
       />
       <Tab.Screen
@@ -75,7 +89,7 @@ function MainTabs(): React.ReactElement {
         component={JournalScreen}
         options={{
           tabBarIcon: ({ focused, color }) => <JournalIcon focused={focused} color={color} size={24} />,
-          tabBarLabel: 'Journal'
+          tabBarLabel: t.tabs.journal
         }}
       />
       <Tab.Screen
@@ -83,7 +97,7 @@ function MainTabs(): React.ReactElement {
         component={DashboardScreen}
         options={{
           tabBarIcon: ({ focused, color }) => <InsightsIcon focused={focused} color={color} size={24} />,
-          tabBarLabel: 'Insights'
+          tabBarLabel: t.tabs.insights
         }}
       />
       <Tab.Screen
@@ -91,7 +105,7 @@ function MainTabs(): React.ReactElement {
         component={ProfileStack}
         options={{
           tabBarIcon: ({ focused, color }) => <ProfileIcon focused={focused} color={color} size={24} />,
-          tabBarLabel: 'Profile'
+          tabBarLabel: t.tabs.profile
         }}
       />
     </Tab.Navigator>

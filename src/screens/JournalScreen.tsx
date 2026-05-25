@@ -20,26 +20,21 @@ import { FilterIcon, CloudIcon, CloudOutlineIcon, DocumentIcon, MicrophoneIcon, 
 import { styles } from './JournalScreen.style';
 import { API_BASE_URL } from '../config/env';
 import { ExerciseService } from '../services/exerciseService';
+import { useLanguage } from '../context/LanguageContext';
 
 // Always fetch fresh token from storage (don't cache across sessions)
 const getApiToken = async (): Promise<string> => {
   try {
-    const token = await AsyncStorage.getItem('@mentora_auth_token');
-    return token || '';
-  } catch (e) {
-    console.error('Failed to get auth token from storage', e);
+    const token = await AsyncStorage.getItem('@mentora_token');
+    return token ? token.trim() : '';
+  } catch {
     return '';
   }
 };
 
-// Per-user journal storage key — isolates data between accounts
 const getJournalKey = async (): Promise<string> => {
-  try {
-    const email = await AsyncStorage.getItem('@mentora_user_email');
-    return email ? `@mentora_journal_entries_${email.trim().toLowerCase()}` : '@mentora_journal_entries';
-  } catch {
-    return '@mentora_journal_entries';
-  }
+  const email = await AsyncStorage.getItem('@mentora_user_email');
+  return email ? `@mentora_journal_entries_${email.trim().toLowerCase()}` : '@mentora_journal_entries';
 };
 
 const FILTER_OPTIONS = [
@@ -71,6 +66,7 @@ function matchSearch(entry: JournalEntry, query: string): boolean {
 }
 
 export function JournalScreen(): React.ReactElement {
+  const { t, isRTL, language } = useLanguage();
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPopupVisible, setFilterPopupVisible] = useState(false);
@@ -161,6 +157,15 @@ export function JournalScreen(): React.ReactElement {
     setMentoraModalVisible(false);
   };
 
+  const getFilterLabel = (id: string) => {
+    if (language !== 'ar') {
+      const labels: Record<string, string> = { all: 'All', text: 'Text', record: 'Record', locked: 'Locked' };
+      return labels[id] || id;
+    }
+    const labels: Record<string, string> = { all: 'الكل', text: 'نصي', record: 'صوتي', locked: 'مغلق بكلمة مرور' };
+    return labels[id] || id;
+  };
+
   const saveEntry = async (): Promise<void> => {
     if (!newTitle.trim() && !newContent.trim()) {
       closeWrite();
@@ -174,6 +179,11 @@ export function JournalScreen(): React.ReactElement {
       // Get the real token from the API
       const token = await getApiToken();
 
+      // Debug: log what token we have
+      console.log('=== JOURNAL DEBUG ===');
+      console.log('Token found:', token ? `YES (${token.substring(0, 20)}...)` : 'NO TOKEN');
+      console.log('Token is mock?', token.startsWith('mock_'));
+
       const apiUrl = API_BASE_URL;
       console.log('Saving entry to:', `${apiUrl}/Journals`);
 
@@ -186,6 +196,7 @@ export function JournalScreen(): React.ReactElement {
         },
         body: JSON.stringify({ journal_text: payloadContent }),
       });
+      console.log('Journal API response status:', response.status);
 
       let tags: string[] = [];
       if (response.ok) {
@@ -221,22 +232,27 @@ export function JournalScreen(): React.ReactElement {
         }
         
       } else {
-        // AI API failed — inform the user and do NOT save the entry
+        // AI API failed — do NOT save the entry (strict blocking behavior)
+        const statusCode = response.status;
+        let errBody = '';
+        try { errBody = await response.text(); } catch {}
+        console.error(`Journal AI failed — HTTP ${statusCode}:`, errBody);
         Alert.alert(
-          'Analysis Failed',
-          'The AI service is temporarily unavailable. Please try again in a moment.',
-          [{ text: 'OK', style: 'default' }]
+          language === 'ar' ? 'فشل التحليل' : 'Analysis Failed',
+          language === 'ar' ? 'خدمة الذكاء الاصطناعي غير متاحة حالياً. يرجى المحاولة مرة أخرى.' : 'The AI service is temporarily unavailable. Please try again in a moment.',
+          [{ text: t.common.ok, style: 'default' }]
         );
         setIsSaving(false);
         return;
       }
 
+      const defaultTitle = language === 'ar' ? 'بلا عنوان' : 'Untitled';
       const newEntry: JournalEntry = {
         id: Date.now().toString(),
-        title: newTitle.trim() || 'Untitled',
+        title: newTitle.trim() || defaultTitle,
         preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
         fullContent: newContent.trim(),
-        date: new Date().toLocaleString('en-US', {
+        date: new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
           month: 'short', day: 'numeric', year: 'numeric',
           hour: 'numeric', minute: '2-digit',
         }),
@@ -253,12 +269,13 @@ export function JournalScreen(): React.ReactElement {
       });
     } catch (error) {
       console.error('Failed to save entry to API:', error);
+      const defaultTitle = language === 'ar' ? 'بلا عنوان' : 'Untitled';
       const fallbackEntry: JournalEntry = {
         id: Date.now().toString(),
-        title: newTitle.trim() || 'Untitled',
+        title: newTitle.trim() || defaultTitle,
         preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
         fullContent: newContent.trim(),
-        date: new Date().toLocaleString('en-US', {
+        date: new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
           month: 'short', day: 'numeric', year: 'numeric',
           hour: 'numeric', minute: '2-digit',
         }),
@@ -292,38 +309,39 @@ export function JournalScreen(): React.ReactElement {
     return (
       <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
         <Card style={styles.entryCard} accessibilityRole="button" accessibilityLabel={`Entry: ${item.title}`}>
-          <View style={styles.entryCardInner}>
+          <View style={[styles.entryCardInner, isRTL && { flexDirection: 'row-reverse' }]}>
             {item.locked && (
-              <View style={styles.entryBadge}>
+              <View style={[styles.entryBadge, isRTL ? { marginLeft: 0, marginRight: 10 } : { marginRight: 10 }]}>
                 <Text style={styles.entryBadgeLock}>🔒</Text>
               </View>
             )}
             
             {!item.locked && item.type === 'record' && (
-               <View style={styles.entryBadge}>
+               <View style={[styles.entryBadge, isRTL ? { marginLeft: 0, marginRight: 10 } : { marginRight: 10 }]}>
                  <Text style={styles.entryBadgeMic}>🎤</Text>
                </View>
             )}
 
-            <View style={styles.entryContent}>
-              <Text style={styles.entryTitle} numberOfLines={1}>
+            <View style={[styles.entryContent, isRTL && { alignItems: 'flex-end' }]}>
+              <Text style={[styles.entryTitle, isRTL && { textAlign: 'right' }]} numberOfLines={1}>
                 {item.title}
               </Text>
               
               <Text 
                 style={[
                   styles.entryPreview, 
-                  item.locked && styles.entryPreviewBlurred
+                  item.locked && styles.entryPreviewBlurred,
+                  isRTL && { textAlign: 'right' }
                 ]} 
                 numberOfLines={2}
               >
                 {displayPreview}
               </Text>
 
-              <View style={styles.entryMeta}>
+              <View style={[styles.entryMeta, isRTL && { flexDirection: 'row-reverse' }]}>
                 <Text style={styles.entryDate}>{item.date}</Text>
                 {item.tags.length > 0 && (
-                  <View style={styles.tags}>
+                  <View style={[styles.tags, isRTL && { flexDirection: 'row-reverse' }]}>
                     {item.tags.map((t) => (
                       <View key={t} style={styles.tag}>
                         <Text style={styles.tagText}>{t}</Text>
@@ -346,12 +364,12 @@ export function JournalScreen(): React.ReactElement {
   return (
     <View style={styles.container} accessibilityLabel="Journal screen">
       {/* Top: Search + Filter */}
-      <View style={styles.topBar}>
-        <View style={styles.searchWrap}>
+      <View style={[styles.topBar, isRTL && { flexDirection: 'row-reverse' }]}>
+        <View style={[styles.searchWrap, isRTL && { flexDirection: 'row-reverse' }]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search..."
+            style={[styles.searchInput, isRTL && { textAlign: 'right' }]}
+            placeholder={t.journal.searchPlaceholder}
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -371,20 +389,26 @@ export function JournalScreen(): React.ReactElement {
 
       {/* New Entry card */}
       <View style={styles.newEntryCard}>
-        <View style={styles.newEntryHeader}>
-          <View>
-            <Text style={styles.newEntryTitle}>New Entry</Text>
-            <Text style={styles.newEntrySubtitle}>Capture your thoughts</Text>
+        <View style={[styles.newEntryHeader, isRTL && { flexDirection: 'row-reverse' }]}>
+          <View style={[isRTL && { alignItems: 'flex-end' }]}>
+            <Text style={styles.newEntryTitle}>{t.journal.newEntry}</Text>
+            <Text style={styles.newEntrySubtitle}>
+              {language === 'ar' ? 'سجّل أفكارك ومشاعرك' : 'Capture your thoughts'}
+            </Text>
           </View>
           <CloudIcon color={colors.white} size={40} />
         </View>
-        <View style={styles.newEntryActions}>
+        <View style={[styles.newEntryActions, isRTL && { flexDirection: 'row-reverse' }]}>
           <TouchableOpacity style={styles.writeButton} onPress={openWrite} activeOpacity={0.8}>
-            <Text style={styles.writeButtonText}>+ Write</Text>
+            <Text style={styles.writeButtonText}>
+              {language === 'ar' ? '+ كتابة' : '+ Write'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.recordButton} activeOpacity={0.8}>
             <Text style={styles.recordIcon}>🎤</Text>
-            <Text style={styles.recordButtonText}>Record</Text>
+            <Text style={styles.recordButtonText}>
+              {language === 'ar' ? 'صوتي' : 'Record'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -397,7 +421,9 @@ export function JournalScreen(): React.ReactElement {
         renderItem={renderEntry}
         ListEmptyComponent={
           <View style={styles.listEmpty}>
-            <Text style={styles.listEmptyText}>No entries match your search or filter.</Text>
+            <Text style={styles.listEmptyText}>
+              {language === 'ar' ? 'لا توجد يوميات تطابق بحثك أو تصنيفك.' : 'No entries match your search or filter.'}
+            </Text>
           </View>
         }
       />
@@ -427,6 +453,7 @@ export function JournalScreen(): React.ReactElement {
                     style={[
                       styles.filterPopupRow,
                       filter === opt.id && styles.filterPopupRowSelected,
+                      isRTL && { flexDirection: 'row-reverse' }
                     ]}
                     onPress={() => {
                       setFilter(opt.id);
@@ -434,7 +461,7 @@ export function JournalScreen(): React.ReactElement {
                     }}
                   >
                     <opt.IconComponent color={filter === opt.id ? colors.textPrimary : colors.textMuted} size={20} />
-                    <Text style={[styles.filterPopupOptionText, { marginLeft: 12 }]}>{opt.label}</Text>
+                    <Text style={[styles.filterPopupOptionText, isRTL ? { marginRight: 12 } : { marginLeft: 12 }]}>{getFilterLabel(opt.id)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -459,39 +486,41 @@ export function JournalScreen(): React.ReactElement {
             <View style={styles.writeOverlay}>
               <TouchableWithoutFeedback onPress={() => { }}>
                 <View style={styles.writeCard}>
-                  <View style={styles.writeCardHeader}>
+                  <View style={[styles.writeCardHeader, isRTL && { flexDirection: 'row-reverse' }]}>
                     <TouchableOpacity onPress={closeWrite} style={styles.writeCloseBtn} hitSlop={HIT_SLOP}>
                       <Text style={styles.writeCloseText}>✕</Text>
                     </TouchableOpacity>
                   </View>
                   <TextInput
-                    style={styles.writeInputTitle}
-                    placeholder="Entry title..."
+                    style={[styles.writeInputTitle, isRTL && { textAlign: 'right' }]}
+                    placeholder={language === 'ar' ? 'عنوان اليومية...' : 'Entry title...'}
                     placeholderTextColor={colors.textMuted}
                     value={newTitle}
                     onChangeText={setNewTitle}
                   />
                   <TextInput
-                    style={styles.writeInputBody}
-                    placeholder="What's your mind?"
+                    style={[styles.writeInputBody, isRTL && { textAlign: 'right' }]}
+                    placeholder={language === 'ar' ? 'ما الذي يدور في ذهنك؟' : "What's on your mind?"}
                     placeholderTextColor={colors.textMuted}
                     value={newContent}
                     onChangeText={setNewContent}
                     multiline
                     numberOfLines={5}
                   />
-                  <TouchableOpacity style={styles.lockedRow} onPress={onLockedPress} activeOpacity={0.8}>
+                  <TouchableOpacity style={[styles.lockedRow, isRTL && { flexDirection: 'row-reverse' }]} onPress={onLockedPress} activeOpacity={0.8}>
                     <View style={[styles.lockedCheckbox, lockedChecked && styles.lockedCheckboxChecked]}>
                       {lockedChecked ? <Text style={{ color: colors.white, fontSize: 14 }}>✓</Text> : null}
                     </View>
-                    <Text style={styles.lockedLabel}>Locked</Text>
+                    <Text style={[styles.lockedLabel, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
+                      {language === 'ar' ? 'مغلق بكلمة مرور' : 'Locked'}
+                    </Text>
                     <Text style={styles.lockedIcon}>🔒</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.saveEntryButton} onPress={saveEntry} activeOpacity={0.9} disabled={isSaving}>
                     {isSaving ? (
                       <ActivityIndicator color={colors.white} />
                     ) : (
-                      <Text style={styles.saveEntryButtonText}>Save Entry</Text>
+                      <Text style={styles.saveEntryButtonText}>{t.journal.addEntry}</Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -510,19 +539,22 @@ export function JournalScreen(): React.ReactElement {
       >
         <View style={styles.mentoraModalOverlay}>
           <View style={styles.mentoraModalCard}>
-            <Text style={styles.mentoraModalText}>
-              Mentora has access to this message if you don't want it, go to the settings
+            <Text style={[styles.mentoraModalText, isRTL && { textAlign: 'right' }]}>
+              {language === 'ar' 
+                ? 'منتورا لديها الصلاحية للوصول لهذه الرسالة لتجربتها وتحليلها. إذا كنت لا تفضل ذلك، يرجى التوجه للإعدادات.'
+                : "Mentora has access to this message. If you don't want it, please configure this in Settings."
+              }
             </Text>
-            <View style={styles.mentoraModalActions}>
+            <View style={[styles.mentoraModalActions, isRTL && { flexDirection: 'row-reverse' }]}>
               <TouchableOpacity
                 style={styles.mentoraCancelBtn}
                 onPress={() => setMentoraModalVisible(false)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.mentoraCancelText}>Cancel</Text>
+                <Text style={styles.mentoraCancelText}>{t.common.cancel}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.mentoraOkBtn} onPress={onMentoraOk} activeOpacity={0.8}>
-                <Text style={styles.mentoraOkText}>Ok</Text>
+                <Text style={styles.mentoraOkText}>{t.common.ok}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -540,17 +572,19 @@ export function JournalScreen(): React.ReactElement {
           <View style={styles.writeOverlay}>
             <TouchableWithoutFeedback onPress={() => { }}>
               <View style={[styles.writeCard, { maxHeight: '80%' }]}>
-                <View style={[styles.writeCardHeader, { justifyContent: 'space-between', flexDirection: 'row', alignItems: 'center' }]}>
-                  <Text style={{ fontSize: 18, color: colors.white, fontWeight: 'bold' }}>Entry Details</Text>
+                <View style={[styles.writeCardHeader, { justifyContent: 'space-between', flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center' }]}>
+                  <Text style={{ fontSize: 18, color: colors.white, fontWeight: 'bold' }}>
+                    {language === 'ar' ? 'تفاصيل اليومية' : 'Entry Details'}
+                  </Text>
                   <TouchableOpacity onPress={() => setSelectedEntry(null)} style={styles.writeCloseBtn} hitSlop={HIT_SLOP}>
                     <Text style={styles.writeCloseText}>✕</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.writeInputTitle, { marginTop: 16, marginBottom: 8 }]}>
+                <Text style={[styles.writeInputTitle, { marginTop: 16, marginBottom: 8 }, isRTL && { textAlign: 'right' }]}>
                   {selectedEntry?.title}
                 </Text>
                 <ScrollView contentContainerStyle={{ paddingBottom: 24 }} style={{ marginVertical: 8 }}>
-                  <Text style={{ color: colors.textPrimary, fontSize: 16, lineHeight: 28 }}>
+                  <Text style={[{ color: colors.textPrimary, fontSize: 16, lineHeight: 28 }, isRTL && { textAlign: 'right' }]}>
                     {selectedEntry?.fullContent || selectedEntry?.preview}
                   </Text>
                 </ScrollView>

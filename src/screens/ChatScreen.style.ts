@@ -43,6 +43,7 @@ export default StyleSheet.create({
   },
   keyboardAv: {
     flex: 1,
+    display: 'flex',
   },
   messageList: {
     padding: 20,
@@ -98,7 +99,10 @@ export default StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 10,
+    paddingBottom: 10,
     backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
   inputContainer: {
     flex: 1,

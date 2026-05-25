@@ -118,10 +118,11 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         ExerciseService.getSuggestedExercises()
       ]);
 
-      // Library only shows your completed/saved progress!
+      // List view: only show exercises the user has actually completed (Done ✅)
       const safeCompleted = completed || [];
       const uniqueCompleted = Array.from(new Map(safeCompleted.map(item => [item.id, item])).values());
-      setExercises(all || uniqueCompleted);
+      // Always set exercises = only the ones the user did
+      setExercises(uniqueCompleted);
       setHistory(uniqueCompleted);
 
       // Show suggested exercise if requested (we take the first pending exercise from the queue)
@@ -266,7 +267,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
             </View>
             <View style={s.headerContent}>
               <Text style={s.headerTitle}>{ex.name}</Text>
-              <Text style={s.headerSubTitle}>{ex.durationMinutes} min . {ex.exerciseType}</Text>
+              <Text style={s.headerSubTitle}>{ex.durationMinutes > 0 ? `${ex.durationMinutes} min` : 'Done Directly'} . {ex.exerciseType}</Text>
             </View>
           </SafeAreaView>
         </View>
@@ -278,7 +279,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
               <View style={s.cardStats}>
                 <View style={s.statCol}>
                   <Text style={s.statLabel}>Duration</Text>
-                  <Text style={s.statValue}>{ex.durationMinutes || 5} min</Text>
+                  <Text style={s.statValue}>{ex.durationMinutes > 0 ? `${ex.durationMinutes} min` : 'Done Directly'}</Text>
                 </View>
                 <View style={s.statCol}>
                   <Text style={s.statLabel}>Rating</Text>
@@ -341,12 +342,33 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
             </Text>
           </View>
 
+          {/* Goals Section */}
+          {ex.goals && ex.goals.length > 0 ? (
+            <>
+              <Text style={s.sectionTitle}>Goals 🎯</Text>
+              <View style={s.goalsContainer}>
+                {ex.goals.map((goal: string, idx: number) => (
+                  <View key={idx} style={s.goalTag}>
+                    <Text style={s.goalTagText}>• {goal}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {/* Research Basis Section */}
+          {ex.researchBasis ? (
+            <View style={s.researchBox}>
+              <Text style={s.researchTitle}>🔬 Evidence Base</Text>
+              <Text style={s.researchText}>{ex.researchBasis}</Text>
+            </View>
+          ) : null}
+
+          {/* Tutorial / Steps Section */}
           {ex.instructions ? (
             <>
-              <Text style={s.sectionTitle}>How to Do It</Text>
-
-
-              {ex.instructions.split(/(?:\n|->|\. )/).filter(s => s.trim().length > 3).map((step, idx) => {
+              <Text style={s.sectionTitle}>How to Do It 📝</Text>
+              {ex.instructions.split(/(?:\n|->)/).filter(s => s.trim().length > 2).map((step, idx) => {
                 const isLink = step.includes('http');
                 const cleanStep = step.trim().replace(/^\d+[\.\-]\s*/, '');
                 return (
@@ -361,6 +383,27 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                 );
               })}
             </>
+          ) : null}
+
+          {/* Tips Section */}
+          {ex.tips ? (
+            <View style={s.tipsBox}>
+              <Text style={s.tipsTitle}>💡 Pro Tip</Text>
+              <Text style={s.tipsText}>{ex.tips}</Text>
+            </View>
+          ) : null}
+
+          {/* Video Section */}
+          {ex.videoUrl ? (
+            <TouchableOpacity 
+              style={s.videoButton} 
+              onPress={() => Linking.openURL(ex.videoUrl as string).catch(err => console.error("Could not open video URL", err))}
+            >
+              <Text style={{ fontSize: 18, marginRight: 8 }}>📺</Text>
+              <Text style={s.videoButtonText} numberOfLines={1}>
+                {ex.videoTitle || 'Watch Video Tutorial'}
+              </Text>
+            </TouchableOpacity>
           ) : null}
 
           <TouchableOpacity style={s.seeAllBtn} onPress={() => setShowHistoryOnly(true)}>
@@ -427,7 +470,15 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
 
       <ScrollView style={s.listContainer}>
         {loading ? <ActivityIndicator size="large" color={colors.primary} /> : (
-          filteredExercises.length === 0 ? <Text style={s.emptyHint}>No exercises.</Text> :
+          filteredExercises.length === 0 ? (
+            <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>✅</Text>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>No completed exercises yet</Text>
+              <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 18 }}>
+                Exercises you complete through AI recommendations will appear here. Start a chat or write a journal entry to get your first suggestion!
+              </Text>
+            </View>
+          ) :
             filteredExercises.map((ex, idx) => (
               <TouchableOpacity
                 key={`${ex.id}-${idx}`}
@@ -459,6 +510,17 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  goalsContainer: { flexDirection: 'column', gap: 6, marginBottom: 24 },
+  goalTag: { backgroundColor: '#F8FAFC', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  goalTagText: { ...typography.bodySmall, color: '#334155', fontWeight: '500' },
+  researchBox: { backgroundColor: '#F0FDFA', borderLeftWidth: 4, borderLeftColor: '#0D9488', padding: 16, borderRadius: 12, marginBottom: 24 },
+  researchTitle: { fontSize: 14, fontWeight: '700', color: '#0F766E', marginBottom: 4 },
+  researchText: { ...typography.caption, color: '#115E59', lineHeight: 18 },
+  tipsBox: { backgroundColor: '#FFFBEB', borderLeftWidth: 4, borderLeftColor: '#D97706', padding: 16, borderRadius: 12, marginVertical: 20 },
+  tipsTitle: { fontSize: 14, fontWeight: '700', color: '#B45309', marginBottom: 4 },
+  tipsText: { ...typography.bodySmall, color: '#78350F', lineHeight: 20 },
+  videoButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 16, padding: 16, marginVertical: 12, justifyContent: 'center' },
+  videoButtonText: { ...typography.bodySmall, color: '#991B1B', fontWeight: '700', flex: 1 },
   darkHeader: { backgroundColor: '#161B22', borderBottomLeftRadius: 40, borderBottomRightRadius: 40, paddingBottom: 60, paddingTop: 8 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16 },
   headerContent: { paddingHorizontal: 32, marginTop: 16 },

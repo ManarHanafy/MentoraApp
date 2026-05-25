@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, AppState,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, AppState, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -58,11 +58,19 @@ export function ChatScreen(): React.ReactElement {
 
   // Keep active chatId in storage in sync
   useEffect(() => {
-    if (chatId && !isEnded) {
-      AsyncStorage.setItem('@mentora_active_chat_id', chatId).catch(console.error);
-    } else {
-      AsyncStorage.removeItem('@mentora_active_chat_id').catch(console.error);
-    }
+    const updateActiveChatId = async () => {
+      try {
+        const key = await ChatService.getUserKey('@mentora_active_chat_id');
+        if (chatId && !isEnded) {
+          await AsyncStorage.setItem(key, chatId);
+        } else {
+          await AsyncStorage.removeItem(key);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    updateActiveChatId();
   }, [chatId, isEnded]);
 
   // ── Load existing open chat on mount ──────────────────────────────────────
@@ -153,7 +161,8 @@ export function ChatScreen(): React.ReactElement {
         // App went to background — save current time
         if (!isEndedRef.current && chatIdRef.current) {
           backgroundTimeRef.current = Date.now();
-          await AsyncStorage.setItem('@chat_exit_time', Date.now().toString());
+          const exitTimeKey = await ChatService.getUserKey('@chat_exit_time');
+          await AsyncStorage.setItem(exitTimeKey, Date.now().toString());
         }
       } else if (nextState === 'active') {
         // App came back to foreground — calculate elapsed time
@@ -164,7 +173,8 @@ export function ChatScreen(): React.ReactElement {
           } else {
             // Clear exit time only if ChatScreen is currently focused
             if (blurTimeRef.current === null) {
-              await AsyncStorage.removeItem('@chat_exit_time');
+              const exitTimeKey = await ChatService.getUserKey('@chat_exit_time');
+              await AsyncStorage.removeItem(exitTimeKey);
             }
           }
         }
@@ -182,7 +192,9 @@ export function ChatScreen(): React.ReactElement {
   useFocusEffect(
     useCallback(() => {
       // Screen gained focus — clear exit time from storage
-      AsyncStorage.removeItem('@chat_exit_time').catch(console.error);
+      ChatService.getUserKey('@chat_exit_time').then(key => {
+        AsyncStorage.removeItem(key).catch(console.error);
+      });
       blurTimeRef.current = null;
 
       // Cancel any active background timer
@@ -196,7 +208,9 @@ export function ChatScreen(): React.ReactElement {
         if (!isEndedRef.current && chatIdRef.current) {
           const now = Date.now();
           blurTimeRef.current = now;
-          AsyncStorage.setItem('@chat_exit_time', now.toString()).catch(console.error);
+          ChatService.getUserKey('@chat_exit_time').then(key => {
+            AsyncStorage.setItem(key, now.toString()).catch(console.error);
+          });
           
           // Also set a backup setTimeout in case they stay in foreground
           if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
@@ -290,7 +304,8 @@ export function ChatScreen(): React.ReactElement {
 
       // Always save the flag and specify if we got exercises or not
       const flagValue = exercises.length > 0 ? 'exercises' : 'none';
-      await AsyncStorage.setItem('@session_complete_alert', flagValue);
+      const alertKey = await ChatService.getUserKey('@session_complete_alert');
+      await AsyncStorage.setItem(alertKey, flagValue);
 
       // If ChatScreen IS still visible, show alert directly
       if (exercises.length > 0) {
@@ -428,16 +443,18 @@ export function ChatScreen(): React.ReactElement {
 
       <KeyboardAvoidingView
         style={s.keyboardAv}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <FlatList
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
-          contentContainerStyle={[s.messageList, { paddingBottom: 100 }]}
+          contentContainerStyle={[s.messageList, { paddingBottom: 20 }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           ListFooterComponent={
             isThinking ? (
               <View style={[s.messageRow, s.messageRowLeft]}>

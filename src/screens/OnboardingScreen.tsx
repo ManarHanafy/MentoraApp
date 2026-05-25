@@ -1,56 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-
-const QUESTIONS = [
-  {
-    step: 1,
-    title: "What brings you here today?",
-    options: [
-      { id: '1', icon: '😔', text: 'Feeling down or depressed' },
-      { id: '2', icon: '😰', text: 'Feeling anxious or worried' },
-      { id: '3', icon: '😴', text: 'Having trouble sleeping' },
-      { id: '4', icon: '⭐', text: 'Just checking my wellbeing' },
-    ]
-  },
-  {
-    step: 2,
-    title: "How often do you feel stressed?",
-    options: [
-      { id: '1', icon: '🕰️', text: 'Rarely' },
-      { id: '2', icon: '⏳', text: 'Sometimes' },
-      { id: '3', icon: '⏰', text: 'Often' },
-      { id: '4', icon: '🚨', text: 'Always' },
-    ]
-  },
-  {
-    step: 3,
-    title: "How do you usually cope with stress?",
-    options: [
-      { id: '1', icon: '🗣️', text: 'Talking to someone' },
-      { id: '2', icon: '🏃‍♂️', text: 'Exercising' },
-      { id: '3', icon: '🧘‍♀️', text: 'Meditating' },
-      { id: '4', icon: '📺', text: 'Watching TV / Distractions' },
-    ]
-  },
-  {
-    step: 4,
-    title: "What's your main goal with Mentora?",
-    options: [
-      { id: '1', icon: '📊', text: 'Track my mental health' },
-      { id: '2', icon: '🎯', text: 'Understand my symptoms' },
-      { id: '3', icon: '💪', text: 'Improve my wellbeing' },
-      { id: '4', icon: '🆘', text: 'Get help and support' },
-    ]
-  }
-];
+import { useLanguage } from '../context/LanguageContext';
 
 export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): React.ReactElement {
   const { userName, completeOnboarding } = useAuth();
+  const { t, isRTL } = useLanguage();
   const [currentStep, setCurrentStep] = useState(1);
   const [selections, setSelections] = useState<Record<number, string[]>>({});
 
-  const question = QUESTIONS[currentStep - 1];
+  const questions = t.onboarding.questions;
+  const question = questions[currentStep - 1];
 
   const handleToggle = (optId: string) => {
     setSelections(prev => {
@@ -82,59 +42,64 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
   return (
     <SafeAreaView style={s.safeArea}>
       <View style={s.container}>
-        
+
         {/* Header */}
         <View style={s.header}>
-           <Text style={s.welcomeText}>Welcome, {userName || 'Friend'}! 👋</Text>
-           <Text style={s.headerTitle}>Let's get to know you</Text>
-           
-           <View style={s.progressRow}>
-              <View style={s.progressTrack}>
-                 <View style={[s.progressFill, { width: progressWidth as any }]} />
-              </View>
-           </View>
-           <Text style={s.stepText}>{currentStep} out of 4</Text>
+          <Text style={[s.welcomeText, isRTL && s.rtlText]}>
+            {t.onboarding.welcome}, {userName || 'Friend'}! 👋
+          </Text>
+          <Text style={[s.headerTitle, isRTL && s.rtlText]}>{t.onboarding.letsKnowYou}</Text>
+
+          <View style={s.progressRow}>
+            <View style={s.progressTrack}>
+              <View style={[s.progressFill, { width: progressWidth as any }]} />
+            </View>
+          </View>
+          <Text style={[s.stepText, isRTL && s.rtlText]}>
+            {currentStep} {t.onboarding.stepOf} 4
+          </Text>
         </View>
 
         {/* Content */}
         <ScrollView style={s.content} showsVerticalScrollIndicator={false}>
-           <Text style={s.questionTitle}>{question.title}</Text>
-           <Text style={s.questionSubtitle}>Select the option that best describes you</Text>
+          <Text style={[s.questionTitle, isRTL && s.rtlText]}>{question.title}</Text>
+          <Text style={[s.questionSubtitle, isRTL && s.rtlText]}>{t.onboarding.selectBest}</Text>
 
-           <View style={s.optionsContainer}>
-             {question.options.map(opt => {
-               const isSelected = (selections[currentStep] || []).includes(opt.id);
-               return (
-                 <TouchableOpacity 
-                   key={opt.id} 
-                   style={s.optionRow} 
-                   activeOpacity={0.7}
-                   onPress={() => handleToggle(opt.id)}
-                 >
-                   <View style={s.optionLeft}>
-                      <Text style={s.optionIcon}>{opt.icon}</Text>
-                      <Text style={s.optionText}>{opt.text}</Text>
-                   </View>
-                   <View style={[s.checkbox, isSelected && s.checkboxSelected]}>
-                      {isSelected && <Text style={s.checkmark}>✓</Text>}
-                   </View>
-                 </TouchableOpacity>
-               );
-             })}
-           </View>
+          <View style={s.optionsContainer}>
+            {question.options.map((opt, idx) => {
+              const optId = String(idx + 1);
+              const isSelected = (selections[currentStep] || []).includes(optId);
+              return (
+                <TouchableOpacity
+                  key={optId}
+                  style={[s.optionRow, isRTL && { flexDirection: 'row-reverse' }]}
+                  activeOpacity={0.7}
+                  onPress={() => handleToggle(optId)}
+                >
+                  <View style={[s.optionLeft, isRTL && { flexDirection: 'row-reverse' }]}>
+                    <Text style={[s.optionIcon, isRTL && { marginRight: 0, marginLeft: 12 }]}>{opt.icon}</Text>
+                    <Text style={[s.optionText, isRTL && s.rtlText]}>{opt.text}</Text>
+                  </View>
+                  <View style={[s.checkbox, isSelected && s.checkboxSelected]}>
+                    {isSelected && <Text style={s.checkmark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </ScrollView>
 
         {/* Footer Navigation */}
-        <View style={s.footer}>
-           {currentStep > 1 ? (
-             <TouchableOpacity onPress={handlePrev}>
-               <Text style={s.navText}>« Previous</Text>
-             </TouchableOpacity>
-           ) : <View />}
+        <View style={[s.footer, isRTL && { flexDirection: 'row-reverse' }]}>
+          {currentStep > 1 ? (
+            <TouchableOpacity onPress={handlePrev}>
+              <Text style={s.navText}>{t.common.previous}</Text>
+            </TouchableOpacity>
+          ) : <View />}
 
-           <TouchableOpacity onPress={handleNext}>
-             <Text style={s.navText}>Next »</Text>
-           </TouchableOpacity>
+          <TouchableOpacity onPress={handleNext}>
+            <Text style={s.navText}>{t.common.next}</Text>
+          </TouchableOpacity>
         </View>
 
       </View>
@@ -145,7 +110,7 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
 const s = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
   container: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
-  
+
   header: { marginBottom: 40 },
   welcomeText: { fontSize: 14, color: '#64748B', fontWeight: '500', marginBottom: 4 },
   headerTitle: { fontSize: 22, fontWeight: '800', color: '#1E293B', marginBottom: 20 },
@@ -157,6 +122,7 @@ const s = StyleSheet.create({
   content: { flex: 1 },
   questionTitle: { fontSize: 20, fontWeight: '700', color: '#161B22', textAlign: 'center', marginBottom: 8 },
   questionSubtitle: { fontSize: 14, color: '#A0AEC0', textAlign: 'center', marginBottom: 40 },
+  rtlText: { textAlign: 'right', writingDirection: 'rtl' },
 
   optionsContainer: { paddingHorizontal: 8 },
   optionRow: {
@@ -171,13 +137,9 @@ const s = StyleSheet.create({
   optionIcon: { fontSize: 24, marginRight: 12 },
   optionText: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
   checkbox: {
-    width: 22,
-    height: 22,
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 22, height: 22,
+    borderWidth: 2, borderColor: '#CBD5E1', borderRadius: 4,
+    justifyContent: 'center', alignItems: 'center',
   },
   checkboxSelected: { backgroundColor: '#161B22', borderColor: '#161B22' },
   checkmark: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },

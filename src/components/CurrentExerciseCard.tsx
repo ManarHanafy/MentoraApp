@@ -4,13 +4,15 @@ import { colors, typography } from '../theme';
 import { Exercise, ExerciseService } from '../services/exerciseService';
 import * as Notifications from 'expo-notifications';
 
-// إعداد التنبيهات للعمل في الخلفية
+// إعداد التنببهات للعمل في الخلفية
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-  }),
+    shouldShowBanner: true,
+    shouldShowList: true,
+  } as any),
 });
 
 interface Props {
@@ -32,7 +34,7 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
   const [isActive, setIsActive] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
     // تشغيل المؤقت فوراً إذا كان هناك وقت
@@ -71,7 +73,7 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
           title: "Mentora: Don't miss your session!",
           body: `You still have ${Math.ceil(timeLeft / 60)} minutes left in your ${enrichedExercise.name} exercise.`,
         },
-        trigger: { seconds: 120 }, // تنبيه بعد دقيقتين كمثال
+        trigger: { seconds: 120 } as any, // تنبيه بعد دقيقتين كمثال
       });
     }
   };
@@ -125,9 +127,11 @@ export const CurrentExerciseCard: React.FC<Props> = ({ exercise, onComplete }) =
           <TouchableOpacity style={s.doneBtn} onPress={handleDone}>
             <Text style={s.btnText}>Done ✨</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.repeatBtn} onPress={handleRepeat}>
-            <Text style={s.repeatText}>Repeat 🔄</Text>
-          </TouchableOpacity>
+          {enrichedExercise.durationMinutes > 0 && (
+            <TouchableOpacity style={s.repeatBtn} onPress={handleRepeat}>
+              <Text style={s.repeatText}>Repeat 🔄</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <View style={s.progressContainer}>

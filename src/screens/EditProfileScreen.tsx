@@ -4,10 +4,12 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, typography } from '../theme';
 import { ArrowLeftIcon, UserCircleIcon } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export function EditProfileScreen(): React.ReactElement {
   const navigation = useNavigation();
   const { userName, email: contextEmail, phone: contextPhone, dob: contextDob, gender: contextGender, updateProfile } = useAuth();
+  const { t, isRTL, language } = useLanguage();
 
   const [name, setName] = useState(userName || '');
   const [email, setEmail] = useState(contextEmail || '');
@@ -20,10 +22,13 @@ export function EditProfileScreen(): React.ReactElement {
      navigation.goBack();
   };
 
+  const textDir = isRTL ? 'right' as const : 'left' as const;
+  const defaultName = language === 'ar' ? 'منار محمد حنفي' : 'Manar Mohamed Hanafy';
+
   return (
     <SafeAreaView style={s.safeArea}>
       <View style={s.darkHeader}>
-        <View style={s.headerTopRow}>
+        <View style={[s.headerTopRow, isRTL && { flexDirection: 'row-reverse' }]}>
           <TouchableOpacity style={s.backButton} onPress={() => navigation.goBack()}>
              <ArrowLeftIcon size={24} color={colors.white} />
           </TouchableOpacity>
@@ -32,17 +37,17 @@ export function EditProfileScreen(): React.ReactElement {
           <View style={s.avatarContainer}>
              <UserCircleIcon size={48} color={colors.primary} />
           </View>
-          <Text style={s.headerName}>{name}</Text>
-          <Text style={s.headerSub}>Mentora welcomes you</Text>
+          <Text style={s.headerName}>{name || defaultName}</Text>
+          <Text style={s.headerSub}>{t.profile.mentoraWelcomes}</Text>
         </View>
       </View>
 
       <ScrollView style={s.content} showsVerticalScrollIndicator={false}>
          <View style={s.inputGroup}>
-            <Text style={s.label}>Name</Text>
+            <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.name}</Text>
             <View style={s.inputWrapper}>
                <TextInput 
-                  style={s.input} 
+                  style={[s.input, { textAlign: textDir }]} 
                   value={name}
                   onChangeText={setName}
                   placeholderTextColor={colors.textMuted}
@@ -51,10 +56,10 @@ export function EditProfileScreen(): React.ReactElement {
          </View>
 
          <View style={s.inputGroup}>
-            <Text style={s.label}>Email</Text>
+            <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.email}</Text>
             <View style={s.inputWrapper}>
                <TextInput 
-                  style={s.input} 
+                  style={[s.input, { textAlign: textDir }]} 
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -64,10 +69,10 @@ export function EditProfileScreen(): React.ReactElement {
          </View>
 
          <View style={s.inputGroup}>
-            <Text style={s.label}>Phone Number</Text>
+            <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.phone}</Text>
             <View style={s.inputWrapper}>
                <TextInput 
-                  style={s.input} 
+                  style={[s.input, { textAlign: textDir }]} 
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
@@ -77,10 +82,10 @@ export function EditProfileScreen(): React.ReactElement {
          </View>
 
          <View style={s.inputGroup}>
-            <Text style={s.label}>Date of Birth</Text>
+            <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.dob}</Text>
             <View style={s.inputWrapper}>
                <TextInput 
-                  style={s.input} 
+                  style={[s.input, { textAlign: textDir }]} 
                   value={dob}
                   onChangeText={setDob}
                   placeholderTextColor={colors.textMuted}
@@ -89,10 +94,10 @@ export function EditProfileScreen(): React.ReactElement {
          </View>
 
          <View style={s.inputGroup}>
-            <Text style={s.label}>Gender</Text>
+            <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.gender}</Text>
             <View style={s.inputWrapper}>
                <TextInput 
-                  style={s.input} 
+                  style={[s.input, { textAlign: textDir }]} 
                   value={gender}
                   onChangeText={setGender}
                   placeholderTextColor={colors.textMuted}
@@ -101,7 +106,7 @@ export function EditProfileScreen(): React.ReactElement {
          </View>
 
          <TouchableOpacity style={s.saveButton} onPress={handleSave}>
-            <Text style={s.saveButtonText}>Save Changes</Text>
+            <Text style={s.saveButtonText}>{t.editProfile.saveChanges}</Text>
          </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

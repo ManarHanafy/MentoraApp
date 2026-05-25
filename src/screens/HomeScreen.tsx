@@ -13,6 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Card } from '../components';
 import { BellIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
 import { colors, typography } from '../theme';
@@ -29,16 +30,12 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRACK_PADDING = 24;
 const TRACK_WIDTH = SCREEN_WIDTH - TRACK_PADDING * 2 - 32;
 
-function getTimeBasedGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+// Greeting is now done inside the component using translation keys
 
 export function HomeScreen(): React.ReactElement {
   const navigation = useNavigation();
   const { userName } = useAuth();
+  const { t, isRTL } = useLanguage();
   const [moodLevel, setMoodLevel] = useState(3);
   const [saySomethingVisible, setSaySomethingVisible] = useState(false);
   const [moodMessage, setMoodMessage] = useState('');
@@ -51,7 +48,8 @@ export function HomeScreen(): React.ReactElement {
   const [stats, setStats] = useState({ avgMood: '3.8', exercisesDone: '0', streak: '0' });
 
   const displayName = userName || 'Friend';
-  const greeting = getTimeBasedGreeting();
+  const h = new Date().getHours();
+  const greeting = h < 12 ? t.home.goodMorning : h < 17 ? t.home.goodAfternoon : t.home.goodEvening;
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Reload data every time the screen gains focus
@@ -68,9 +66,10 @@ export function HomeScreen(): React.ReactElement {
         // Run timeout check first
         await ChatService.checkAndFinalizeTimeout();
 
-        const flag = await AsyncStorage.getItem('@session_complete_alert');
+        const alertKey = await ChatService.getUserKey('@session_complete_alert');
+        const flag = await AsyncStorage.getItem(alertKey);
         if (flag) {
-          await AsyncStorage.removeItem('@session_complete_alert');
+          await AsyncStorage.removeItem(alertKey);
           await loadData(); // refresh pendingQueue in UI
 
           if (flag === 'exercises') {
@@ -154,7 +153,6 @@ export function HomeScreen(): React.ReactElement {
 
   const trackMood = async (): Promise<void> => {
     if (!moodMessage.trim() && moodLevel === 3) {
-      // If nothing changed, just close
       closeSaySomething();
       return;
     }
@@ -165,17 +163,17 @@ export function HomeScreen(): React.ReactElement {
       
       if (result.exercises && result.exercises.length > 0) {
         Alert.alert(
-          "Mood Tracked",
-          `We've analyzed your message and added ${result.exercises.length} new exercises for you.`,
-          [{ text: "Great", onPress: () => loadData() }]
+          t.home.moodTracked,
+          t.home.moodTrackedMsg.replace('%d', String(result.exercises.length)),
+          [{ text: t.common.ok, onPress: () => loadData() }]
         );
       } else {
-        Alert.alert("Success", "Your mood has been tracked successfully.");
+        Alert.alert(t.common.success, t.home.moodTrackedSuccess);
         loadData();
       }
       closeSaySomething();
     } catch (e: any) {
-      Alert.alert("Error", e.message || "Failed to track mood. Please try again.");
+      Alert.alert(t.common.error, e.message || t.home.moodFailed);
     } finally {
       setIsSubmittingMood(false);
     }
@@ -208,13 +206,13 @@ export function HomeScreen(): React.ReactElement {
          <View style={styles.modalOverlay}>
             <View style={[styles.modalCard, { maxHeight: '80%', padding: 20 }]}>
                <View style={styles.modalCardHeader}>
-                  <Text style={styles.modalCardTitle}>Pending Exercises ({pendingQueue.length})</Text>
+                  <Text style={styles.modalCardTitle}>{t.home.pendingExercises} ({pendingQueue.length})</Text>
                   <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowNotifications(false)}>
                      <Text style={styles.modalCloseText}>✕</Text>
                   </TouchableOpacity>
                </View>
                {pendingQueue.length === 0 ? (
-                  <Text style={{color: colors.textMuted, textAlign: 'center', marginTop: 20}}>No pending exercises. You're all caught up!</Text>
+                  <Text style={{color: colors.textMuted, textAlign: 'center', marginTop: 20}}>{t.home.noPending}</Text>
                ) : (
                   <FlatList 
                      data={pendingQueue}
@@ -242,7 +240,7 @@ export function HomeScreen(): React.ReactElement {
       </Modal>
 
       <Card style={styles.moodCard}>
-        <Text style={styles.moodTitle}>How are you feeling?</Text>
+        <Text style={[styles.moodTitle, isRTL && { textAlign: 'right' }]}>{t.home.howAreYou}</Text>
         <View style={styles.moodEmojis}>
           {MOOD_EMOJIS.map((emoji, index) => (
             <TouchableOpacity
@@ -257,46 +255,46 @@ export function HomeScreen(): React.ReactElement {
         </View>
         <View style={styles.sliderWrap}>
           <View style={styles.sliderLabels}>
-            <Text style={styles.sliderLabelText}>Low</Text>
-            <Text style={styles.sliderLabelText}>High</Text>
+            <Text style={styles.sliderLabelText}>{t.home.low}</Text>
+            <Text style={styles.sliderLabelText}>{t.home.high}</Text>
           </View>
           <View style={[styles.sliderTrack, { width: TRACK_WIDTH }]}>
             <View style={[styles.sliderFill, { width: `${fillWidth}%` }]} />
             <View style={[styles.sliderThumb, { left: Math.max(0, thumbLeft) }]} />
           </View>
-          <Text style={styles.moodLevelText}>Mood Level: {moodLevel}/5</Text>
+          <Text style={[styles.moodLevelText, isRTL && { textAlign: 'right' }]}>{t.home.moodLevel}: {moodLevel}/5</Text>
         </View>
         <TouchableOpacity
           style={styles.needToSayTouch}
           onPress={() => setSaySomethingVisible(true)}
           accessibilityLabel="Need to say something?"
         >
-          <Text style={styles.needToSayText}>Need to say something?</Text>
+          <Text style={[styles.needToSayText, isRTL && { textAlign: 'right' }]}>{t.home.needToSay}</Text>
         </TouchableOpacity>
       </Card>
 
       <View style={styles.recCard}>
-        <View style={styles.recHeader}>
+        <View style={[styles.recHeader, isRTL && { flexDirection: 'row-reverse' }]}>
           <View style={styles.recStarWrap}>
             <StarIcon color={colors.white} size={18} />
           </View>
-          <Text style={styles.recTitle}>Recommended for you</Text>
+          <Text style={[styles.recTitle, isRTL && { marginLeft: 0, marginRight: 10 }]}>{t.home.recommendedForYou}</Text>
         </View>
         
         {pendingQueue.length > 0 ? (
           <>
-             <Text style={[typography.h3, { color: colors.white, marginTop: 4, marginBottom: 8, fontWeight: 'bold' }]}>
+             <Text style={[typography.h3, { color: colors.white, marginTop: 4, marginBottom: 8, fontWeight: 'bold', textAlign: isRTL ? 'right' : 'left' }]}>
                {pendingQueue[0].name}
              </Text>
              {pendingQueue.length > 1 && (
-               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 16 }}>
-                 +{pendingQueue.length - 1} more waiting for you
+               <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 16, textAlign: isRTL ? 'right' : 'left' }}>
+                 +{pendingQueue.length - 1} {t.home.moreWaiting}
                </Text>
              )}
           </>
         ) : (
-          <Text style={styles.recDesc}>
-            Explore our exercise library and track your daily progress.
+          <Text style={[styles.recDesc, isRTL && { textAlign: 'right' }]}>
+            {t.home.exploreLibrary}
           </Text>
         )}
 
@@ -313,52 +311,52 @@ export function HomeScreen(): React.ReactElement {
           accessibilityLabel="Start exercise"
         >
           <Text style={styles.startExerciseText}>
-            {pendingQueue.length > 0 ? `Start ${pendingQueue[0].name.slice(0, 15)}...` : 'See completed exercises'}
+            {pendingQueue.length > 0 ? `${t.home.startExercise} ${pendingQueue[0].name.slice(0, 15)}...` : t.home.seeCompleted}
           </Text>
           <ArrowRightIcon color={colors.white} size={16} />
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Insights</Text>
+      <Text style={[styles.sectionTitle, isRTL && { textAlign: 'right' }]}>{t.home.recentInsights}</Text>
       <View style={{ marginBottom: 20 }}>
           <TouchableOpacity 
-            style={styles.activityCard}
+            style={[styles.activityCard, isRTL && { flexDirection: 'row-reverse' }]}
             onPress={() => (navigation as any).navigate('Insights')}
           >
              <View style={[styles.activityIconWrap, { backgroundColor: '#E0E7FF' }]}>
                 <Text style={styles.activityIcon}>📈</Text>
              </View>
-             <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Mood Analysis</Text>
-                <Text style={styles.activityMeta}>Average Score: {stats.avgMood} • Trending Up</Text>
+             <View style={[styles.activityContent, isRTL && { alignItems: 'flex-end' }]}>
+                <Text style={styles.activityTitle}>{t.home.moodAnalysis}</Text>
+                <Text style={styles.activityMeta}>{t.home.moodAvgScore}: {stats.avgMood} • {t.home.trendingUp}</Text>
              </View>
              <ArrowRightIcon color={colors.textMuted} size={18} />
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.activityCard}
+            style={[styles.activityCard, isRTL && { flexDirection: 'row-reverse' }]}
             onPress={() => (navigation as any).navigate('Insights')}
           >
              <View style={[styles.activityIconWrap, { backgroundColor: '#FEE2E2' }]}>
                 <Text style={styles.activityIcon}>🏆</Text>
              </View>
-             <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Exercise Activity</Text>
-                <Text style={styles.activityMeta}>{stats.exercisesDone} Total Exercises Completed</Text>
+             <View style={[styles.activityContent, isRTL && { alignItems: 'flex-end' }]}>
+                <Text style={styles.activityTitle}>{t.home.exerciseActivity}</Text>
+                <Text style={styles.activityMeta}>{stats.exercisesDone} {t.home.totalCompleted}</Text>
              </View>
              <ArrowRightIcon color={colors.textMuted} size={18} />
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.activityCard}
+            style={[styles.activityCard, isRTL && { flexDirection: 'row-reverse' }]}
             onPress={() => (navigation as any).navigate('Insights')}
           >
              <View style={[styles.activityIconWrap, { backgroundColor: '#FEF3C7' }]}>
                 <Text style={styles.activityIcon}>🔥</Text>
              </View>
-             <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>Personal Streak</Text>
-                <Text style={styles.activityMeta}>{stats.streak} Day Record • Keep going!</Text>
+             <View style={[styles.activityContent, isRTL && { alignItems: 'flex-end' }]}>
+                <Text style={styles.activityTitle}>{t.home.personalStreak}</Text>
+                <Text style={styles.activityMeta}>{stats.streak} {t.home.dayRecord} • {t.home.keepGoing}</Text>
              </View>
              <ArrowRightIcon color={colors.textMuted} size={18} />
           </TouchableOpacity>
@@ -370,14 +368,14 @@ export function HomeScreen(): React.ReactElement {
             <TouchableWithoutFeedback onPress={() => { }}>
               <View style={styles.modalCard}>
                 <View style={styles.modalCardHeader}>
-                  <Text style={styles.modalCardTitle}>What made you feel this way?</Text>
+                  <Text style={[styles.modalCardTitle, isRTL && { textAlign: 'right' }]}>{t.home.whatMadeYouFeel}</Text>
                   <TouchableOpacity onPress={closeSaySomething} style={styles.modalCloseBtn}>
                     <Text style={styles.modalCloseText}>✕</Text>
                   </TouchableOpacity>
                 </View>
                 <TextInput
-                  style={styles.modalInput}
-                  placeholder="Message"
+                  style={[styles.modalInput, isRTL && { textAlign: 'right' }]}
+                  placeholder={t.home.message}
                   placeholderTextColor={colors.textMuted}
                   value={moodMessage}
                   onChangeText={setMoodMessage}
@@ -393,7 +391,7 @@ export function HomeScreen(): React.ReactElement {
                   {isSubmittingMood ? (
                     <ActivityIndicator color={colors.white} />
                   ) : (
-                    <Text style={styles.trackMoodBtnText}>Track My Mood</Text>
+                    <Text style={styles.trackMoodBtnText}>{t.home.trackMyMood}</Text>
                   )}
                 </TouchableOpacity>
               </View>

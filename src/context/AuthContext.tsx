@@ -25,6 +25,7 @@ export interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  loginWithSocial: (provider: 'google' | 'facebook', verifiedEmail: string) => Promise<{ success: boolean; message?: string }>;
   signUp: (data: { email: string; password: string; name: string; phone: string; dob: string; gender: string }) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   logout: () => Promise<void>;
@@ -54,16 +55,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
   const loadStored = useCallback(async (): Promise<void> => {
     try {
-      const [hasAccount, loggedIn, onboardingDone, userName, email, phone, dob, gender] = await Promise.all([
+      const [hasAccount, loggedIn, userName, email, phone, dob, gender] = await Promise.all([
         AsyncStorage.getItem(HAS_ACCOUNT_KEY),
         AsyncStorage.getItem(LOGGED_IN_KEY),
-        AsyncStorage.getItem(ONBOARDING_DONE_KEY),
         AsyncStorage.getItem(USER_NAME_KEY),
         AsyncStorage.getItem(USER_EMAIL_KEY),
         AsyncStorage.getItem(USER_PHONE_KEY),
         AsyncStorage.getItem(USER_DOB_KEY),
         AsyncStorage.getItem(USER_GENDER_KEY),
       ]);
+
+      let onboardingDone = 'false';
+      if (email) {
+        const userOnboardingKey = `@mentora_onboarding_done_${email.trim().toLowerCase()}`;
+        const userOnboarding = await AsyncStorage.getItem(userOnboardingKey);
+        if (userOnboarding) {
+          onboardingDone = userOnboarding;
+        } else {
+          onboardingDone = (await AsyncStorage.getItem(ONBOARDING_DONE_KEY)) || 'false';
+        }
+      } else {
+        onboardingDone = (await AsyncStorage.getItem(ONBOARDING_DONE_KEY)) || 'false';
+      }
+
       setState({
         hasAccount: hasAccount === 'true',
         isLoggedIn: loggedIn === 'true',
@@ -89,15 +103,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       try {
         const { AuthService } = require('../services/authService');
         const data = await AuthService.login(email, password);
-        
         if (data && data.token) {
+          const usernamePart = email.split('@')[0];
+          const name = usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
+
           await AsyncStorage.multiSet([
             [LOGGED_IN_KEY, 'true'],
             [HAS_ACCOUNT_KEY, 'true'],
             [TOKEN_KEY, data.token],
             [USER_EMAIL_KEY, email],
-            [ONBOARDING_DONE_KEY, 'true'],
+            [USER_NAME_KEY, name],
           ]);
+
+          // Save password for silent re-login
+          await AsyncStorage.setItem('@mentora_user_password', password);
+          
+          // Since it's a regular login, we assume onboarding is already completed
+          const userOnboardingKey = `@mentora_onboarding_done_${email.trim().toLowerCase()}`;
+          await AsyncStorage.setItem(userOnboardingKey, 'true');
           
           const { ExerciseService } = require('../services/exerciseService');
           ExerciseService.clearCache();
@@ -106,14 +129,104 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
             ...s, 
             isLoggedIn: true, 
             email: email, 
+            userName: name,
             hasAccount: true,
-            hasCompletedOnboarding: true 
+            hasCompletedOnboarding: true,
           }));
           return { success: true };
         }
         return { success: false, message: 'Invalid response from server' };
       } catch (e: any) {
         return { success: false, message: e.message || 'Login failed' };
+      }
+    },
+    []
+  );
+
+  const loginWithSocial = useCallback(
+    async (provider: 'google' | 'facebook', verifiedEmail: string): Promise<{ success: boolean; message?: string }> => {
+      try {
+        const usernamePart = verifiedEmail.split('@')[0];
+        const name = usernamePart.charAt(0).toUpperCase() + usernamePart.slice(1);
+        const email = verifiedEmail;
+        // Deterministic password for the auto-created social account
+        const autoPassword = `Mentora_${usernamePart}_Social!1`;
+
+        let token = '';
+        try {
+          const { API_BASE_URL } = require('../config/env');
+          const { AuthService } = require('../services/authService');
+
+          // Step 1: Try to login directly (account may already exist)
+          try {
+            const loginRes = await AuthService.login(email, autoPassword);
+            if (loginRes?.token) {
+              token = loginRes.token;
+            }
+          } catch {
+            // Login failed — account doesn't exist yet, register first
+          }
+
+          // Step 2: If no token, register then login
+          if (!token) {
+            try {
+              await AuthService.register({
+                username: usernamePart,
+                email,
+                firstName: name,
+                lastName: 'User',
+                password: autoPassword,
+                phoneNumber: '',
+                dateOfBirth: '',
+                gender: '',
+              });
+            } catch {
+              // Registration may fail if account already exists — that's fine
+            }
+            // Try login after register
+            try {
+              const loginRes2 = await AuthService.login(email, autoPassword);
+              if (loginRes2?.token) {
+                token = loginRes2.token;
+              }
+            } catch (loginErr) {
+              console.warn('Social login: auto-login after register failed:', loginErr);
+            }
+          }
+        } catch (apiErr) {
+          console.warn('Social login: backend unreachable, continuing without token:', apiErr);
+        }
+
+        // Check if this social user has completed onboarding before
+        const userOnboardingKey = `@mentora_onboarding_done_${email.trim().toLowerCase()}`;
+        const existingOnboarding = await AsyncStorage.getItem(userOnboardingKey);
+        const hasOnboarded = existingOnboarding === 'true';
+        
+        await AsyncStorage.multiSet([
+          [LOGGED_IN_KEY, 'true'],
+          [HAS_ACCOUNT_KEY, 'true'],
+          [TOKEN_KEY, token],
+          [USER_EMAIL_KEY, email],
+          [USER_NAME_KEY, name],
+        ]);
+
+        await AsyncStorage.setItem(userOnboardingKey, hasOnboarded ? 'true' : 'false');
+        await AsyncStorage.setItem('@mentora_user_password', autoPassword);
+        
+        const { ExerciseService } = require('../services/exerciseService');
+        ExerciseService.clearCache();
+        
+        setState((s) => ({ 
+          ...s, 
+          isLoggedIn: true, 
+          email: email, 
+          userName: name,
+          hasAccount: true,
+          hasCompletedOnboarding: hasOnboarded,
+        }));
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, message: e.message || 'Social login failed' };
       }
     },
     []
@@ -162,6 +275,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           [USER_GENDER_KEY, formData.gender],
         ]);
         
+        await AsyncStorage.setItem('@mentora_user_password', formData.password);
+        const userOnboardingKey = `@mentora_onboarding_done_${formData.email.trim().toLowerCase()}`;
+        await AsyncStorage.setItem(userOnboardingKey, 'false');
+        
         if (token) {
           await AsyncStorage.setItem(TOKEN_KEY, token);
         }
@@ -193,9 +310,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   }, []);
 
   const completeOnboarding = useCallback(async (): Promise<void> => {
+    const userEmail = state.email || '';
+    if (userEmail) {
+      const userOnboardingKey = `@mentora_onboarding_done_${userEmail.trim().toLowerCase()}`;
+      await AsyncStorage.setItem(userOnboardingKey, 'true');
+    }
     await AsyncStorage.setItem(ONBOARDING_DONE_KEY, 'true');
     setState((s) => ({ ...s, hasCompletedOnboarding: true }));
-  }, []);
+  }, [state.email]);
 
   const logout = useCallback(async (): Promise<void> => {
     try {
@@ -208,6 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         USER_DOB_KEY,
         USER_GENDER_KEY,
         ONBOARDING_DONE_KEY,
+        '@mentora_user_password',
       ];
       await AsyncStorage.multiRemove(keysToClear);
       
@@ -218,7 +341,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       setState({
         ...defaultState,
         isLoading: false,
-        isLoggedIn: false
+        isLoggedIn: false,
+        hasCompletedOnboarding: false
       });
     } catch (e) {
       console.error('Logout error', e);
@@ -242,6 +366,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const value: AuthContextValue = {
     ...state,
     login,
+    loginWithSocial,
     signUp,
     completeOnboarding,
     logout,
