@@ -50,26 +50,33 @@ export const AuthService = {
 
   register: async (data: RegisterRequest) => {
     try {
-      // Try /api/Auth/register first as per screenshot, fallback to /api/Users
+      // Primary registration endpoint in C# backend is POST /api/Auth/register
       let endpoint = `${API_BASE_URL}/Auth/register`;
-      
-      // We check if we should use /api/Users instead if /api/Auth/register is not available
-      // But for simplicity in this implementation, we'll try the one seen in the screenshot
-      const response = await fetch(endpoint, {
+      let response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
 
-      if (!response.ok && response.status === 404) {
-        // Fallback to /api/Users
-        endpoint = `${API_BASE_URL}/Users`;
-        const fallbackRes = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (fallbackRes.ok) return await fallbackRes.json();
+      // Fallback endpoint if /api/Auth/register is not available (e.g. older environments)
+      if (!response.ok) {
+        const fallbackEndpoint = `${API_BASE_URL}/Users`;
+        try {
+          const fallbackRes = await fetch(fallbackEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (fallbackRes.ok) {
+            return await fallbackRes.json();
+          }
+          // If fallback also failed but got a better status, use it for error extracting
+          if (fallbackRes.status !== 404) {
+            response = fallbackRes;
+          }
+        } catch (err) {
+          console.warn('Fallback registration error', err);
+        }
       }
 
       if (response.ok) {
