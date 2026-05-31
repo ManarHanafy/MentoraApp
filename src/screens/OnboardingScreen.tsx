@@ -64,7 +64,8 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
   const hasAnsweredCurrent = currentSelections.length > 0;
 
   const handleToggle = (optId: number) => {
-    const isSingleChoice = question.maxAllowedSelections === 1 || question.inputControlType?.toLowerCase() === 'radio';
+    const isQuestion9 = currentStep === 9 || question.questionId === 9;
+    const isSingleChoice = !isQuestion9;
     setSelections(prev => {
       const current = prev[question.questionId] || [];
       if (isSingleChoice) {
@@ -128,7 +129,8 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
   };
 
   const progressWidth = `${(currentStep / questions.length) * 100}%`;
-  const isSingleChoice = question.maxAllowedSelections === 1 || question.inputControlType?.toLowerCase() === 'radio';
+  const isQuestion9 = currentStep === 9 || question.questionId === 9;
+  const isSingleChoice = !isQuestion9;
 
   return (
     <SafeAreaView style={s.safeArea}>

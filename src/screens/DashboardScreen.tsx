@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Act
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography } from '../theme';
 import { Exercise, ExerciseService } from '../services/exerciseService';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { API_BASE_URL } from '../config/env';
 import { useLanguage } from '../context/LanguageContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +47,7 @@ const CustomBarChart = ({ labels, data, maxVal = 5 }: { labels: string[], data: 
 };
 
 export function DashboardScreen(): React.ReactElement {
+  const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
   const [suggestedExercise, setSuggestedExercise] = useState<Exercise | null>(null);
   const [loading, setLoading] = useState(true);
@@ -425,10 +426,20 @@ export function DashboardScreen(): React.ReactElement {
       return found ? found[1] : tag;
     };
 
+    const getExerciseCode = (tag: string): string => {
+      const lower = tag.toLowerCase();
+      if (lower.includes('stress') || lower.includes('work')) return 'Routine_Breaks';
+      if (lower.includes('sleep'))                            return 'Daily_Wind_Down_Routine';
+      if (lower.includes('anxi') || lower.includes('worry')) return '5_Senses_Grounding';
+      if (lower.includes('sad') || lower.includes('depress'))return 'Behavioral_Activation_Plan';
+      return 'Simple_Breathing_1xDay';
+    };
+
     const strategies = topTags.map(t => ({
       emoji: copingTip(t.tag).emoji,
       title: language === 'ar' ? `لـ ${translateTag(t.tag)}` : `For ${t.tag}`,
-      desc: copingTip(t.tag).desc
+      desc: copingTip(t.tag).desc,
+      exerciseCode: getExerciseCode(t.tag)
     }));
 
     return (
@@ -468,10 +479,27 @@ export function DashboardScreen(): React.ReactElement {
         {strategies.length > 0 && (
           <View style={{ backgroundColor: '#1E293B', borderRadius: 24, padding: 20, marginTop: 12, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 }}>
             <Text style={[{ fontSize: 16, fontWeight: '700', color: '#FFFFFF', marginBottom: 16 }, isRTL && { textAlign: 'right' }]}>
-              {language === 'ar' ? 'آليات التعامل الموصى بها' : 'Recommended Coping Strategies'}
+              {language === 'ar' ? 'آليات التعامل الموصى بها (اضغط لبدء التمرين)' : 'Recommended Coping Strategies (Tap to Start)'}
             </Text>
             {strategies.map((item, idx) => (
-              <View key={idx} style={[{ flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, marginBottom: 12, alignItems: 'center' }, isRTL && { flexDirection: 'row-reverse' }]}>
+              <TouchableOpacity
+                key={idx}
+                style={[{ flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, marginBottom: 12, alignItems: 'center' }, isRTL && { flexDirection: 'row-reverse' }]}
+                activeOpacity={0.8}
+                onPress={() => {
+                  const details = ExerciseService.getExerciseDetailsByCode(item.exerciseCode);
+                  navigation.navigate('Exercises', {
+                    openSuggested: true,
+                    exerciseToStart: {
+                      id: item.exerciseCode,
+                      exerciseCode: item.exerciseCode,
+                      name: details.name || item.title,
+                      description: details.description || item.desc,
+                      ...details
+                    }
+                  });
+                }}
+              >
                 <View style={[{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }, isRTL ? { marginLeft: 12 } : { marginRight: 12 }]}>
                   <Text style={{ fontSize: 18 }}>{item.emoji}</Text>
                 </View>
@@ -479,7 +507,7 @@ export function DashboardScreen(): React.ReactElement {
                   <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{item.title}</Text>
                   <Text style={[{ fontSize: 11, color: '#64748B', marginTop: 2 }, isRTL && { textAlign: 'right' }]} numberOfLines={2}>{item.desc}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}

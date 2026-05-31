@@ -7,7 +7,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 
 const MailIcon = () => (
    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -20,6 +20,13 @@ const LockIcon = () => (
    <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 11H3v11h18V11z" />
       <Path d="M7 11V7a5 5 0 0110 0v4" />
+   </Svg>
+);
+
+const EyeIcon = () => (
+   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <Circle cx="12" cy="12" r="3" stroke="#A0AEC0" strokeWidth="2" />
    </Svg>
 );
 
@@ -45,28 +52,32 @@ const GoogleIcon = () => (
       fill="#FBBC05"
     />
     <Path
-      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
       fill="#EA4335"
     />
   </Svg>
 );
 
 const FacebookIcon = () => (
-  <Svg width="22" height="22" viewBox="0 0 24 24">
-    <Path
-      d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"
-      fill="#1877F2"
-    />
+  <Svg width="22" height="22" viewBox="0 0 24 24" fill="#1877F2">
+    <Path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
   </Svg>
 );
 
 export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): React.ReactElement {
+  const navigation = useNavigation();
   const { login, loginWithSocial } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [socialModalVisible, setSocialModalVisible] = useState(false);
+  const [socialProvider, setSocialProvider] = useState<'google' | 'facebook' | null>(null);
+  const [socialEmail, setSocialEmail] = useState('');
+  const [socialEmailError, setSocialEmailError] = useState('');
 
   const validateEmail = (text: string) => {
     setEmail(text);
@@ -142,16 +153,16 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
       <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
           
-          {/* Logo */}
+          {/* Logo / Brand */}
           <View style={s.logoContainer}>
-             <Image 
+              <Image 
                 source={require('../assets/logo.png')} 
                 style={s.logoImage} 
                 resizeMode="contain" 
-             />
-             <Text style={s.brandTitle}>Mentora</Text>
-             <Text style={s.brandSubtitle}>Welcome Back!</Text>
-             <Text style={s.brandDesc}>Sign in to continue your journey</Text>
+              />
+              <Text style={s.brandTitle}>Mentora</Text>
+              <Text style={s.brandSubtitle}>Welcome Back!</Text>
+              <Text style={s.brandDesc}>Sign in to continue your journey</Text>
           </View>
 
           {/* Form */}
@@ -180,11 +191,11 @@ export function LoginScreen({ onGoToSignUp }: { onGoToSignUp: () => void }): Rea
                 placeholderTextColor="#A0AEC0"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry={true}
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
-              <TouchableOpacity>
-                <EyeOffIcon />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                {showPassword ? <EyeIcon /> : <EyeOffIcon />}
               </TouchableOpacity>
             </View>
 

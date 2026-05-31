@@ -4,6 +4,21 @@ import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon, LockIcon } from '../components/Icons';
 import { colors, typography } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
+import Svg, { Path, Circle } from 'react-native-svg';
+
+const EyeIcon = () => (
+   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <Circle cx="12" cy="12" r="3" stroke="#A0AEC0" strokeWidth="2" />
+   </Svg>
+);
+
+const EyeOffIcon = () => (
+   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+      <Path d="M1 1l22 22" />
+   </Svg>
+);
 
 export function ChangePasswordScreen(): React.ReactElement {
   const navigation = useNavigation();
@@ -12,6 +27,9 @@ export function ChangePasswordScreen(): React.ReactElement {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleUpdate = () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -73,34 +91,49 @@ export function ChangePasswordScreen(): React.ReactElement {
 
           <View style={s.form}>
             <Text style={[s.fieldLabel, { textAlign: textDir }]}>{t.changePassword.current}</Text>
-            <TextInput
-              style={[s.input, { textAlign: textDir }]}
-              placeholder={language === 'ar' ? 'أدخل كلمة المرور الحالية' : 'Enter current password'}
-              placeholderTextColor="#94A3B8"
-              secureTextEntry
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-            />
+            <View style={[s.inputContainer, isRTL && { flexDirection: 'row-reverse' }]}>
+              <TextInput
+                style={[s.input, { textAlign: textDir }]}
+                placeholder={language === 'ar' ? 'أدخل كلمة المرور الحالية' : 'Enter current password'}
+                placeholderTextColor="#94A3B8"
+                secureTextEntry={!showCurrentPassword}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+              />
+              <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
+                {showCurrentPassword ? <EyeIcon /> : <EyeOffIcon />}
+              </TouchableOpacity>
+            </View>
 
             <Text style={[s.fieldLabel, { textAlign: textDir }]}>{t.changePassword.newPass}</Text>
-            <TextInput
-              style={[s.input, { textAlign: textDir }]}
-              placeholder={language === 'ar' ? 'أدخل كلمة المرور الجديدة' : 'Enter new password'}
-              placeholderTextColor="#94A3B8"
-              secureTextEntry
-              value={newPassword}
-              onChangeText={setNewPassword}
-            />
+            <View style={[s.inputContainer, isRTL && { flexDirection: 'row-reverse' }]}>
+              <TextInput
+                style={[s.input, { textAlign: textDir }]}
+                placeholder={language === 'ar' ? 'أدخل كلمة المرور الجديدة' : 'Enter new password'}
+                placeholderTextColor="#94A3B8"
+                secureTextEntry={!showNewPassword}
+                value={newPassword}
+                onChangeText={setNewPassword}
+              />
+              <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
+                {showNewPassword ? <EyeIcon /> : <EyeOffIcon />}
+              </TouchableOpacity>
+            </View>
 
             <Text style={[s.fieldLabel, { textAlign: textDir }]}>{t.changePassword.confirm}</Text>
-            <TextInput
-              style={[s.input, { textAlign: textDir }]}
-              placeholder={language === 'ar' ? 'تأكيد كلمة المرور الجديدة' : 'Confirm new password'}
-              placeholderTextColor="#94A3B8"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
+            <View style={[s.inputContainer, isRTL && { flexDirection: 'row-reverse' }]}>
+              <TextInput
+                style={[s.input, { textAlign: textDir }]}
+                placeholder={language === 'ar' ? 'تأكيد كلمة المرور الجديدة' : 'Confirm new password'}
+                placeholderTextColor="#94A3B8"
+                secureTextEntry={!showConfirmPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                {showConfirmPassword ? <EyeIcon /> : <EyeOffIcon />}
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity style={s.btnSave} onPress={handleUpdate}>
               <Text style={s.btnSaveText}>{t.changePassword.update}</Text>
@@ -180,12 +213,17 @@ const s = StyleSheet.create({
     marginBottom: 8,
     marginTop: 16,
   },
-  input: {
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 14,
     paddingHorizontal: 16,
+  },
+  input: {
+    flex: 1,
     paddingVertical: 14,
     fontSize: 15,
     color: '#0F172A',

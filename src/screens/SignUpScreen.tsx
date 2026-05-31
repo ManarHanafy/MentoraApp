@@ -41,6 +41,21 @@ const LockIcon = () => (
    </Svg>
 );
 
+const EyeIcon = () => (
+   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <Circle cx="12" cy="12" r="3" stroke="#A0AEC0" strokeWidth="2" />
+   </Svg>
+);
+
+const EyeOffIcon = () => (
+   <Svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+      <Path d="M1 1l22 22" />
+   </Svg>
+);
+
+
 export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): React.ReactElement {
   const { signUp } = useAuth();
   const [name, setName] = useState('');
@@ -53,6 +68,8 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
   
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Validation States
   const [emailError, setEmailError] = useState('');
@@ -219,8 +236,11 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
                 placeholderTextColor="#A0AEC0"
                 value={password}
                 onChangeText={validatePassword}
-                secureTextEntry={true}
+                secureTextEntry={!showPassword}
               />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                {showPassword ? <EyeIcon /> : <EyeOffIcon />}
+              </TouchableOpacity>
             </View>
             {passwordError ? <Text style={s.errorHint}>{passwordError}</Text> : null}
 
@@ -233,8 +253,11 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
                 placeholderTextColor="#A0AEC0"
                 value={confirmPassword}
                 onChangeText={validateConfirmPassword}
-                secureTextEntry={true}
+                secureTextEntry={!showConfirmPassword}
               />
+              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                {showConfirmPassword ? <EyeIcon /> : <EyeOffIcon />}
+              </TouchableOpacity>
             </View>
             {confirmPasswordError ? <Text style={s.errorHint}>{confirmPasswordError}</Text> : null}
 

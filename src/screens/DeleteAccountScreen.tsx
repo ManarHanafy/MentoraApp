@@ -4,33 +4,72 @@ import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon, TrashIcon } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ExerciseService } from '../services/exerciseService';
+import { API_BASE_URL } from '../config/env';
 
 export function DeleteAccountScreen(): React.ReactElement {
   const navigation = useNavigation();
-  const { logout } = useAuth();
+  const { logout, email } = useAuth();
   const { t, isRTL, language } = useLanguage();
-  const [emailConfirm, setEmailConfirm] = useState('');
 
   const handleDelete = () => {
-    if (!emailConfirm) {
-      Alert.alert(
-        language === 'ar' ? 'خطأ' : 'Error', 
-        language === 'ar' ? 'يرجى إدخال بريدك الإلكتروني للتأكيد.' : 'Please enter your email to confirm.'
-      );
-      return;
-    }
     Alert.alert(
-      language === 'ar' ? 'إجراء نهائي ودائم' : 'Permanent Action',
+      language === 'ar' ? '⚠️ إجراء نهائي ودائم' : '⚠️ Permanent Action',
       language === 'ar' 
-        ? 'هل أنت متأكد تماماً من رغبتك في حذف حسابك نهائياً؟ سيتم حذف جميع مذكراتك ورسائلك وسجلات تقدمك إلى الأبد.'
-        : 'Are you absolutely sure you want to permanently delete your account? All your journal entries, messages, and custom AI exercise history will be deleted forever.',
+        ? `هل أنت متأكد تماماً من رغبتك في حذف حسابك (${email}) نهائياً؟ سيتم مسح جميع مذكراتك ورسائلك وسجلات تقدمك تماماً من خوادمنا ولن تتمكن من تسجيل الدخول به مجدداً.`
+        : `Are you absolutely sure you want to permanently delete your account (${email})? All your journal entries, messages, and custom AI exercise history will be deleted from our servers forever, and you will not be able to log in with this account again.`,
       [
         { text: t.common.cancel, style: 'cancel' },
         {
           text: language === 'ar' ? 'حذف نهائي' : 'Permanently Delete',
           style: 'destructive',
           onPress: async () => {
-            await logout();
+            try {
+              const token = await ExerciseService.getAuthToken();
+              const response = await fetch(`${API_BASE_URL}/Account`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+
+              if (response.ok || response.status === 200 || response.status === 204) {
+                const cleanEmail = email ? email.trim().toLowerCase() : '';
+                const keysToRemove = [
+                  '@mentora_logged_in',
+                  '@mentora_user_email',
+                  '@mentora_user_name',
+                  '@mentora_auth_token',
+                  '@mentora_has_account',
+                ];
+                if (cleanEmail) {
+                  keysToRemove.push(`@mentora_onboarding_done_${cleanEmail}`);
+                  keysToRemove.push(`@mentora_journal_entries_${cleanEmail}`);
+                }
+                await AsyncStorage.multiRemove(keysToRemove);
+                
+                Alert.alert(
+                  language === 'ar' ? 'تم حذف الحساب بنجاح' : 'Account Deleted Successfully',
+                  language === 'ar'
+                    ? 'تم مسح حسابك وكل بياناتك نهائياً. يمكنك إنشاء حساب جديد في أي وقت.'
+                    : 'Your account and all associated data have been permanently erased. You may sign up with a new account anytime.',
+                  [{ text: t.common.ok, onPress: async () => {
+                    await logout();
+                  }}]
+                );
+              } else {
+                throw new Error(`Server returned ${response.status}`);
+              }
+            } catch (error: any) {
+              Alert.alert(
+                language === 'ar' ? 'خطأ في الاتصال' : 'Connection Error',
+                language === 'ar' 
+                  ? 'تعذر الاتصال بالخادم لحذف الحساب. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.'
+                  : 'Could not connect to the server to delete your account. Please check your internet connection and try again.'
+              );
+            }
           }
         }
       ]
@@ -88,18 +127,16 @@ export function DeleteAccountScreen(): React.ReactElement {
           </View>
 
           <View style={s.form}>
-            <Text style={[s.fieldLabel, { textAlign: textDir }]}>
-              {language === 'ar' ? 'اكتب بريدك الإلكتروني للتأكيد' : 'Type your email to confirm'}
+            <Text style={[s.fieldLabel, { textAlign: textDir, color: '#E11D48', marginBottom: 12 }]}>
+              {language === 'ar' ? 'تأكيد الحساب النشط' : 'Confirm Active Account'}
             </Text>
-            <TextInput
-              style={[s.input, { textAlign: textDir }]}
-              placeholder="your.email@example.com"
-              placeholderTextColor="#94A3B8"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={emailConfirm}
-              onChangeText={setEmailConfirm}
-            />
+            
+            <View style={[s.emailDisplayContainer, isRTL && { flexDirection: 'row-reverse' }]}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B' }}>{email}</Text>
+              <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                {language === 'ar' ? 'سيتم مسح هذا الحساب نهائياً' : 'This account will be permanently deleted'}
+              </Text>
+            </View>
 
             <TouchableOpacity style={s.btnDelete} onPress={handleDelete}>
               <Text style={s.btnDeleteText}>
@@ -199,6 +236,14 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
+  },
+  emailDisplayContainer: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 20,
   },
   input: {
     backgroundColor: '#F8FAFC',
