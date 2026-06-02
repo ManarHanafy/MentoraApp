@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, SafeAreaView, Image, Alert, Modal, FlatList, ActivityIndicator
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 import Svg, { Path, Circle } from 'react-native-svg';
 
@@ -58,6 +59,8 @@ const EyeOffIcon = () => (
 
 export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): React.ReactElement {
   const { signUp } = useAuth();
+  const { language } = useLanguage();
+  
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -70,6 +73,54 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Date Picker States
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [tempDay, setTempDay] = useState(1);
+  const [tempMonth, setTempMonth] = useState(1);
+  const [tempYear, setTempYear] = useState(2000);
+
+  // Month lists
+  const arabicMonths = [
+    'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+    'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+  ];
+  const englishMonths = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  const getDaysInMonth = (month: number, year: number) => {
+    return new Date(year, month, 0).getDate();
+  };
+
+  const handleOpenDatePicker = () => {
+    if (dob) {
+      const parts = dob.split('/');
+      if (parts.length === 3) {
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const y = parseInt(parts[2], 10);
+        if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+          setTempDay(d);
+          setTempMonth(m);
+          setTempYear(y);
+        }
+      }
+    } else {
+      setTempDay(1);
+      setTempMonth(1);
+      setTempYear(2000);
+    }
+    setDatePickerVisible(true);
+  };
+
+  const handleConfirmDate = () => {
+    const formattedDay = tempDay.toString().padStart(2, '0');
+    const formattedMonth = tempMonth.toString().padStart(2, '0');
+    setDob(`${formattedDay}/${formattedMonth}/${tempYear}`);
+    setDatePickerVisible(false);
+  };
 
   // Validation States
   const [emailError, setEmailError] = useState('');
@@ -111,9 +162,25 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
 
   const validatePhone = (text: string) => {
     setPhone(text);
-    const re = /^\+?[0-9]{8,15}$/;
-    if (text.length > 0 && !re.test(text)) {
-      setPhoneError('Please enter a valid phone number');
+    if (text.length === 0) {
+      setPhoneError('');
+      return;
+    }
+    
+    const clean = text.replace(/[\s-]/g, '');
+    
+    // Exact Egyptian formats:
+    // +201[0125]XXXXXXXX (13 chars)
+    // 201[0125]XXXXXXXX (12 chars)
+    // 01[0125]XXXXXXXX (11 chars)
+    const isValidEG = /^\+201[0125]\d{8}$/.test(clean) || /^201[0125]\d{8}$/.test(clean) || /^01[0125]\d{8}$/.test(clean);
+    
+    if (!isValidEG) {
+      setPhoneError(
+        language === 'ar'
+          ? 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)'
+          : 'Please enter a valid Egyptian phone number (e.g., 01012345678)'
+      );
     } else {
       setPhoneError('');
     }
@@ -121,20 +188,43 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
 
   const handleSignUp = async () => {
     if (!name || !email || !password || !phone) {
-      Alert.alert("Missing Fields", "Please fill in all required fields.");
+      Alert.alert(
+        language === 'ar' ? 'حقول مطلوبة' : 'Missing Fields',
+        language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة.' : 'Please fill in all required fields.'
+      );
       return;
     }
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!re.test(email)) {
-      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      Alert.alert(
+        language === 'ar' ? 'بريد إلكتروني غير صحيح' : 'Invalid Email',
+        language === 'ar' ? 'يرجى إدخال بريد إلكتروني صحيح.' : 'Please enter a valid email address.'
+      );
       return;
     }
+    
+    const cleanPhone = phone.replace(/[\s-]/g, '');
+    const isValidEG = /^\+201[0125]\d{8}$/.test(cleanPhone) || /^201[0125]\d{8}$/.test(cleanPhone) || /^01[0125]\d{8}$/.test(cleanPhone);
+    if (!isValidEG) {
+      Alert.alert(
+        language === 'ar' ? 'رقم هاتف غير صحيح' : 'Invalid Phone Number',
+        language === 'ar' ? 'يرجى إدخال رقم هاتف مصري صحيح.' : 'Please enter a valid Egyptian phone number.'
+      );
+      return;
+    }
+
     if (password !== confirmPassword) {
-      Alert.alert("Error", "Passwords do not match.");
+      Alert.alert(
+        language === 'ar' ? 'خطأ' : 'Error',
+        language === 'ar' ? 'كلمات المرور غير متطابقة.' : 'Passwords do not match.'
+      );
       return;
     }
     if (emailError || passwordError || phoneError || confirmPasswordError) {
-      Alert.alert("Form Error", "Please correct the errors in the form.");
+      Alert.alert(
+        language === 'ar' ? 'خطأ في النموذج' : 'Form Error',
+        language === 'ar' ? 'يرجى تصحيح الأخطاء في النموذج أولاً.' : 'Please correct the errors in the form.'
+      );
       return;
     }
 
@@ -143,7 +233,10 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
     try {
       await signUp({ email, password, name, phone, dob, gender });
     } catch (e: any) {
-      Alert.alert("Registration Failed", e.message || "An error occurred during registration.");
+      Alert.alert(
+        language === 'ar' ? 'فشل التسجيل' : 'Registration Failed',
+        e.message || (language === 'ar' ? 'حدث خطأ أثناء التسجيل.' : 'An error occurred during registration.')
+      );
     } finally {
       setIsLoading(false);
     }
@@ -209,16 +302,12 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
             {phoneError ? <Text style={s.errorHint}>{phoneError}</Text> : null}
 
             <Text style={s.label}>Date of Birth</Text>
-            <View style={s.inputContainer}>
+            <TouchableOpacity style={s.inputContainer} onPress={handleOpenDatePicker}>
               <CalendarIcon />
-              <TextInput
-                style={s.input}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor="#A0AEC0"
-                value={dob}
-                onChangeText={setDob}
-              />
-            </View>
+              <Text style={[s.input, { textAlignVertical: 'center', paddingTop: 14, color: dob ? '#1E293B' : '#A0AEC0' }]}>
+                {dob || "DD/MM/YYYY"}
+              </Text>
+            </TouchableOpacity>
 
             <Text style={s.label}>Gender</Text>
             <TouchableOpacity style={s.inputContainer} onPress={() => setGenderModalVisible(true)}>
@@ -303,6 +392,94 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
         </TouchableOpacity>
       </Modal>
 
+      {/* Date of Birth Picker Modal */}
+      <Modal visible={datePickerVisible} transparent animationType="slide">
+        <TouchableOpacity style={s.pickerOverlay} activeOpacity={1} onPress={() => setDatePickerVisible(false)}>
+          <TouchableOpacity style={s.pickerContent} activeOpacity={1}>
+            <View style={s.pickerHeader}>
+              <Text style={s.pickerTitle}>{language === 'ar' ? 'تاريخ الميلاد' : 'Date of Birth'}</Text>
+              <TouchableOpacity onPress={() => setDatePickerVisible(false)}>
+                <Text style={s.pickerCloseButton}>{language === 'ar' ? 'إلغاء' : 'Cancel'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.pickerRow}>
+              {/* Day Column */}
+              <View style={s.pickerColumn}>
+                <Text style={s.columnHeader}>{language === 'ar' ? 'اليوم' : 'Day'}</Text>
+                <FlatList
+                  data={Array.from({ length: getDaysInMonth(tempMonth, tempYear) }, (_, i) => i + 1)}
+                  keyExtractor={(item) => item.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity 
+                      style={[s.pickerItem, tempDay === item && s.pickerItemActive]}
+                      onPress={() => setTempDay(item)}
+                    >
+                      <Text style={[s.pickerItemText, tempDay === item && s.pickerItemTextActive]}>{item}</Text>
+                    </TouchableOpacity>
+                  )}
+                  showsVerticalScrollIndicator={false}
+                />
+              </View>
+
+              {/* Month Column */}
+              <View style={s.pickerColumn}>
+                <Text style={s.columnHeader}>{language === 'ar' ? 'الشهر' : 'Month'}</Text>
+                <FlatList
+                  data={Array.from({ length: 12 }, (_, i) => i + 1)}
+                  keyExtractor={(item) => item.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity 
+                      style={[s.pickerItem, tempMonth === item && s.pickerItemActive]}
+                      onPress={() => {
+                        setTempMonth(item);
+                        const maxDays = getDaysInMonth(item, tempYear);
+                        if (tempDay > maxDays) {
+                          setTempDay(maxDays);
+                        }
+                      }}
+                    >
+                      <Text style={[s.pickerItemText, tempMonth === item && s.pickerItemTextActive]}>
+                        {language === 'ar' ? arabicMonths[item - 1] : englishMonths[item - 1]}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  showsVerticalScrollIndicator={false}
+                />
+              </View>
+
+              {/* Year Column */}
+              <View style={s.pickerColumn}>
+                <Text style={s.columnHeader}>{language === 'ar' ? 'السنة' : 'Year'}</Text>
+                <FlatList
+                  data={Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i)}
+                  keyExtractor={(item) => item.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity 
+                      style={[s.pickerItem, tempYear === item && s.pickerItemActive]}
+                      onPress={() => {
+                        setTempYear(item);
+                        const maxDays = getDaysInMonth(tempMonth, item);
+                        if (tempDay > maxDays) {
+                          setTempDay(maxDays);
+                        }
+                      }}
+                    >
+                      <Text style={[s.pickerItemText, tempYear === item && s.pickerItemTextActive]}>{item}</Text>
+                    </TouchableOpacity>
+                  )}
+                  showsVerticalScrollIndicator={false}
+                />
+              </View>
+            </View>
+
+            <TouchableOpacity style={s.pickerConfirmButton} onPress={handleConfirmDate}>
+              <Text style={s.pickerConfirmText}>{language === 'ar' ? 'تأكيد' : 'Confirm'}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
 
     </SafeAreaView>
   );
@@ -357,7 +534,98 @@ const s = StyleSheet.create({
   modalItemText: { fontSize: 16, textAlign: 'center', color: '#1E293B' },
   codeBox: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 16, backgroundColor: '#F8FAFC', textAlign: 'center', fontSize: 24, fontWeight: '700', letterSpacing: 10, height: 56, width: '100%', marginBottom: 24, color: '#1E293B' },
   modalActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, width: '100%' },
-  modalBtn: { flex: 1, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }
+  modalBtn: { flex: 1, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+
+  // Date Picker Modal Styles
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  pickerContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    maxHeight: '60%',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 12,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#161B22',
+  },
+  pickerCloseButton: {
+    fontSize: 16,
+    color: '#161B22',
+    fontWeight: '600',
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    height: 220,
+    marginBottom: 20,
+  },
+  pickerColumn: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    overflow: 'hidden',
+  },
+  columnHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    backgroundColor: '#E2E8F0',
+    width: '100%',
+    textAlign: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  pickerItem: {
+    paddingVertical: 10,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerItemActive: {
+    backgroundColor: '#161B22',
+  },
+  pickerItemText: {
+    fontSize: 15,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  pickerItemTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  pickerConfirmButton: {
+    backgroundColor: '#161B22',
+    height: 50,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
 });
 
 export default SignUpScreen;
