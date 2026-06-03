@@ -12,11 +12,13 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { colors, HIT_SLOP } from '../theme';
 import { Card } from '../components';
-import { FilterIcon, CloudIcon, CloudOutlineIcon, DocumentIcon, MicrophoneIcon, LockIcon } from '../components/Icons';
+import { FilterIcon, CloudIcon, CloudOutlineIcon, DocumentIcon, MicrophoneIcon, LockIcon, SearchIcon } from '../components/Icons';
 import { styles } from './JournalScreen.style';
 import { API_BASE_URL } from '../config/env';
 import { ExerciseService } from '../services/exerciseService';
@@ -75,6 +77,7 @@ export function JournalScreen(): React.ReactElement {
   const [filterPopupVisible, setFilterPopupVisible] = useState(false);
   const [writeSheetVisible, setWriteSheetVisible] = useState(false);
   const [mentoraModalVisible, setMentoraModalVisible] = useState(false);
+  const [journalCrisisVisible, setJournalCrisisVisible] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [lockedChecked, setLockedChecked] = useState(false);
@@ -233,6 +236,14 @@ export function JournalScreen(): React.ReactElement {
             await ExerciseService.saveSuggestedExercises(aiSuggested);
             console.log('Saved', aiSuggested.length, 'suggested exercises from journal');
         }
+
+        // === CRISIS DETECTION FROM API ===
+        // Show crisis modal only if AI detects crisis or danger risk
+        const apiRiskLevel = (data.risk_level || data.riskLevel || data.RiskLevel || 'normal').toLowerCase();
+        const isApiCrisis = apiRiskLevel === 'crisis' || apiRiskLevel === 'danger';
+        if (isApiCrisis) {
+          setJournalCrisisVisible(true);
+        }
         
       } else {
         // AI API failed — do NOT save the entry (strict blocking behavior)
@@ -299,13 +310,13 @@ export function JournalScreen(): React.ReactElement {
           <View style={[styles.entryCardInner, isRTL && { flexDirection: 'row-reverse' }]}>
             {item.locked && (
               <View style={[styles.entryBadge, isRTL ? { marginLeft: 0, marginRight: 10 } : { marginRight: 10 }]}>
-                <Text style={styles.entryBadgeLock}>🔒</Text>
+                <LockIcon size={16} color={colors.primary} />
               </View>
             )}
             
             {!item.locked && item.type === 'record' && (
                <View style={[styles.entryBadge, isRTL ? { marginLeft: 0, marginRight: 10 } : { marginRight: 10 }]}>
-                 <Text style={styles.entryBadgeMic}>🎤</Text>
+                 <MicrophoneIcon size={16} color={colors.primary} />
                </View>
             )}
 
@@ -353,7 +364,7 @@ export function JournalScreen(): React.ReactElement {
       {/* Top: Search + Filter */}
       <View style={[styles.topBar, isRTL && { flexDirection: 'row-reverse' }]}>
         <View style={[styles.searchWrap, isRTL && { flexDirection: 'row-reverse' }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <View style={{ marginRight: 8 }}><SearchIcon size={18} color={colors.textSecondary} /></View>
           <TextInput
             style={[styles.searchInput, isRTL && { textAlign: 'right' }]}
             placeholder={t.journal.searchPlaceholder}
@@ -392,7 +403,7 @@ export function JournalScreen(): React.ReactElement {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.recordButton} activeOpacity={0.8}>
-            <Text style={styles.recordIcon}>🎤</Text>
+            <View style={{ marginRight: 6 }}><MicrophoneIcon size={16} color={colors.white} /></View>
             <Text style={styles.recordButtonText}>
               {language === 'ar' ? 'صوتي' : 'Record'}
             </Text>
@@ -501,7 +512,7 @@ export function JournalScreen(): React.ReactElement {
                     <Text style={[styles.lockedLabel, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
                       {language === 'ar' ? 'مغلق بكلمة مرور' : 'Locked'}
                     </Text>
-                    <Text style={styles.lockedIcon}>🔒</Text>
+                    <LockIcon size={16} color={colors.primary} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.saveEntryButton} onPress={saveEntry} activeOpacity={0.9} disabled={isSaving}>
                     {isSaving ? (
@@ -579,6 +590,117 @@ export function JournalScreen(): React.ReactElement {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+      </Modal>
+      {/* Red Crisis warning alert modal */}
+      <Modal
+        visible={journalCrisisVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setJournalCrisisVisible(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            width: '100%',
+            maxWidth: 400,
+            backgroundColor: '#FFF5F5',
+            borderRadius: 28,
+            borderWidth: 2,
+            borderColor: '#FCA5A5',
+            padding: 24,
+            alignItems: 'center',
+            shadowColor: '#EF4444',
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.15,
+            shadowRadius: 16,
+            elevation: 8
+          }}>
+            {/* Warning Icon Header */}
+            <View style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: '#FEE2E2',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 16
+            }}>
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="12" r="10" stroke="#DC2626" strokeWidth={2} />
+                <Path d="M12 8v4" stroke="#DC2626" strokeWidth={2} strokeLinecap="round" />
+                <Circle cx="12" cy="16" r="1.5" fill="#DC2626" />
+              </Svg>
+            </View>
+
+            <Text style={{
+              fontSize: 20,
+              fontWeight: '800',
+              color: '#991B1B',
+              textAlign: 'center',
+              marginBottom: 10
+            }}>
+              {language === 'ar' ? 'تنبيه هـام جداً' : 'Emergency Alert'}
+            </Text>
+
+            <Text style={{
+              fontSize: 14,
+              color: '#7F1D1D',
+              textAlign: 'center',
+              lineHeight: 22,
+              marginBottom: 20,
+              paddingHorizontal: 8
+            }}>
+              {language === 'ar' 
+                ? 'سلامتك هي أهم شيء بالنسبة لنا. يرجى التواصل فوراً مع شخص مقرب منك أو عائلتك، أو الاتصال بخط المساعدة المباشر للحصول على دعم فوري. أنت لست وحدك وهناك من يريد مساعدتك.'
+                : 'Your safety is our absolute priority. Please reach out to someone close to you (family or friends) or contact a crisis support service immediately. Help is always available and you are not alone.'
+              }
+            </Text>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#DC2626',
+                  borderRadius: 16,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: '#DC2626',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 4,
+                  elevation: 3
+                }}
+                onPress={() => Linking.openURL('tel:988').catch(() => Alert.alert('Error', 'Could not dial 988. Please call directly.'))}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 }}>
+                  {language === 'ar' ? 'الاتصال بخط المساعدة (988)' : 'Call Crisis Lifeline (988)'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 16,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: '#FCA5A5'
+                }}
+                onPress={() => setJournalCrisisVisible(false)}
+              >
+                <Text style={{ color: '#7F1D1D', fontWeight: '700', fontSize: 14 }}>
+                  {language === 'ar' ? 'إغلاق التنبيه' : 'Close'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View >
   );

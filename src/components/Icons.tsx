@@ -472,3 +472,59 @@ export const CheckCircleOutlineIcon = ({ color = colors.textPrimary, size = 20, 
     </Svg>
 );
 
+export const ClockIcon = ({ color = colors.textPrimary, size = 20 }: IconProps) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} />
+        <Path d="M12 6v6l4 2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+);
+
+export const SearchIcon = ({ color = colors.textPrimary, size = 20 }: IconProps) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="11" cy="11" r="7" stroke={color} strokeWidth={2} />
+        <Path d="M21 21l-4.3-4.3" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+);
+
+export const BrainIcon = ({ color = colors.textPrimary, size = 20 }: IconProps) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+            d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-1A5.5 5.5 0 0 1 3 16.5v-3a3.5 3.5 0 0 1 3.5-3.5h1A2.5 2.5 0 0 1 10 12.5"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+        <Path
+            d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 2.5 2.5h1A5.5 5.5 0 0 0 21 16.5v-3a3.5 3.5 0 0 0-3.5-3.5h-1A2.5 2.5 0 0 0 14 12.5"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+    </Svg>
+);
+
+export const TrophyIcon = ({ color = colors.textPrimary, size = 20 }: IconProps) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M4 22h16" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M12 2a6 6 0 0 1 6 6v5a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8a6 6 0 0 1 6-6z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+);
+
+export const FireIcon = ({ color = colors.textPrimary, size = 20 }: IconProps) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+            d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 3.5 3.5 5.5 1.5 2 2 3.5 2 5.5a6.5 6.5 0 0 1-13 0c0-1.5.5-3 1.5-4.5.5 1.5 1.5 2.5 2.5 3.5z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        />
+    </Svg>
+);
+
+

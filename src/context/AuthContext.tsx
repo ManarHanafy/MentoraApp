@@ -475,6 +475,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     try {
       const keysToClear = [
         LOGGED_IN_KEY,
+        HAS_ACCOUNT_KEY,
         TOKEN_KEY,
         USER_NAME_KEY,
         USER_EMAIL_KEY,

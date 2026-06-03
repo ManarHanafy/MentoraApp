@@ -80,6 +80,15 @@ rawExercises.forEach((item: any) => {
 
 
 
+export const EXCLUDED_EXERCISE_IDS = [
+  'Reality_Check_Journal_Weekly',
+  'No_Crisis_Action',
+  'Daily_Reminder_Set',
+  'App_Reminder_Setup',
+  'Encourage_First_Checkin',
+  'One_Exercise_Today'
+];
+
 export const ExerciseService = {
   getExerciseDetailsByCode: (code: any): Partial<Exercise> => {
     if (!code) return {};
@@ -125,17 +134,19 @@ export const ExerciseService = {
   },
 
   getLocalLibraryExercises: (): Exercise[] => {
-    return Object.entries(EXERCISE_LIBRARY_MAP).map(([code, ex]) => ({
-      id: code,
-      name: ex.name || 'Mindfulness Exercise',
-      description: ex.description || '',
-      exerciseType: ex.exerciseType || 'General',
-      durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : 5,
-      difficulty: ex.difficulty || 'Medium',
-      instructions: ex.instructions || '',
-      isActive: true,
-      exerciseCode: code
-    }));
+    return Object.entries(EXERCISE_LIBRARY_MAP)
+      .filter(([code]) => !EXCLUDED_EXERCISE_IDS.includes(code))
+      .map(([code, ex]) => ({
+        id: code,
+        name: ex.name || 'Mindfulness Exercise',
+        description: ex.description || '',
+        exerciseType: ex.exerciseType || 'General',
+        durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : 5,
+        difficulty: ex.difficulty || 'Medium',
+        instructions: ex.instructions || '',
+        isActive: true,
+        exerciseCode: code
+      }));
   },
 
   getAllExercises: async (): Promise<Exercise[]> => {
@@ -157,17 +168,22 @@ export const ExerciseService = {
         return ExerciseService.getLocalLibraryExercises();
       }
       
-      return data.map((ex: any) => ({
-        id: ex.id || ex.Id,
-        name: ex.name || ex.Name || ex.exerciseCode || 'AI Suggested',
-        description: ex.description || ex.Description || '',
-        exerciseType: ex.exerciseType || ex.ExerciseType || 'General',
-        durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : (ex.DurationMinutes || 0),
-        difficulty: ex.difficulty || ex.Difficulty || 'Medium',
-        instructions: ex.instructions || ex.Instructions || '',
-        isActive: ex.isActive !== undefined ? ex.isActive : true,
-        exerciseCode: ex.exerciseCode || ex.ExerciseCode
-      }));
+      return data
+        .filter((ex: any) => {
+          const id = ex.id || ex.Id || ex.exerciseCode || ex.ExerciseCode || '';
+          return !EXCLUDED_EXERCISE_IDS.includes(id);
+        })
+        .map((ex: any) => ({
+          id: ex.id || ex.Id,
+          name: ex.name || ex.Name || ex.exerciseCode || 'AI Suggested',
+          description: ex.description || ex.Description || '',
+          exerciseType: ex.exerciseType || ex.ExerciseType || 'General',
+          durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : (ex.DurationMinutes || 0),
+          difficulty: ex.difficulty || ex.Difficulty || 'Medium',
+          instructions: ex.instructions || ex.Instructions || '',
+          isActive: ex.isActive !== undefined ? ex.isActive : true,
+          exerciseCode: ex.exerciseCode || ex.ExerciseCode
+        }));
     } catch (error) {
       console.warn('Network error while fetching exercises, falling back to local library:', error);
       return ExerciseService.getLocalLibraryExercises();
@@ -177,7 +193,12 @@ export const ExerciseService = {
   // حفظ التمارين المقترحة من الـ AI
   saveSuggestedExercises: async (exercises: any[]): Promise<void> => {
     try {
-      const mapped = exercises.map((ex: any) => {
+      const filteredInput = exercises.filter((ex: any) => {
+        const id = typeof ex === 'string' ? ex : (ex.id || ex.exerciseCode || ex.exercise_code || '');
+        return !EXCLUDED_EXERCISE_IDS.includes(id);
+      });
+
+      const mapped = filteredInput.map((ex: any) => {
         // Handle case where ex is just a string (the name or code of the exercise)
         if (typeof ex === 'string') {
           const details = ExerciseService.getExerciseDetailsByCode(ex);
@@ -222,7 +243,11 @@ export const ExerciseService = {
       let existing = existingStr ? JSON.parse(existingStr) : [];
       
       // Give them unique instance IDs so we can remove them specifically without affecting identical recommendations
-      const timestamped = mapped.map(ex => ({ ...ex, queueId: Date.now().toString() + Math.random().toString() }));
+      const timestamped = mapped.map(ex => ({ 
+        ...ex, 
+        queueId: Date.now().toString() + Math.random().toString(),
+        suggestedAt: Date.now()
+      }));
       
       // Remove any existing pending exercises that are being re-suggested 
       // to avoid duplicates and move the latest suggestions to the top
@@ -258,7 +283,9 @@ export const ExerciseService = {
     try {
       const key = await ExerciseService.getUserKey('@suggested_exercises');
       const stored = await AsyncStorage.getItem(key);
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const list = JSON.parse(stored);
+      return list.filter((ex: any) => !EXCLUDED_EXERCISE_IDS.includes(ex.id || ex.exerciseCode));
     } catch (error) {
       return [];
     }
@@ -268,12 +295,17 @@ export const ExerciseService = {
     try {
       const key = await ExerciseService.getUserKey('@completed_exercises');
       const stored = await AsyncStorage.getItem(key);
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const list = JSON.parse(stored);
+      return list.filter((ex: any) => !EXCLUDED_EXERCISE_IDS.includes(ex.id || ex.exerciseCode));
     } catch (error) { return []; }
   },
 
   saveCompletedExercise: async (exercise: Exercise) => {
     try {
+      if (EXCLUDED_EXERCISE_IDS.includes(String(exercise.id)) || EXCLUDED_EXERCISE_IDS.includes(String(exercise.exerciseCode))) {
+        return;
+      }
       const key = await ExerciseService.getUserKey('@completed_exercises');
       const completed = await ExerciseService.getCompletedExercises();
       // Remove any existing entry with the same ID, then add to the front

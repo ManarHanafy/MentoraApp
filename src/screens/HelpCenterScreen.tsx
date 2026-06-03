@@ -5,6 +5,7 @@ import { ArrowLeftIcon } from '../components/Icons';
 import { colors } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HelpCircle, Mail } from 'lucide-react-native';
 
 const FAQS_EN = [
   { q: 'How does Mentora AI work?', a: 'Mentora uses advanced AI to analyze your journal entries and chat messages, then recommends personalized wellness exercises tailored to your emotional state and needs.' },
@@ -44,7 +45,9 @@ export function HelpCenterScreen(): React.ReactElement {
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={s.hero}>
-          <Text style={s.heroEmoji}>🤝</Text>
+          <View style={s.heroIconContainer}>
+            <HelpCircle size={48} color={colors.primary} />
+          </View>
           <Text style={s.heroTitle}>
             {language === 'ar' ? 'كيف يمكننا مساعدتك؟' : 'How can we help?'}
           </Text>
@@ -59,7 +62,7 @@ export function HelpCenterScreen(): React.ReactElement {
 
         {faqs.map((item, idx) => (
           <View key={idx} style={s.faqCard}>
-            <Text style={[s.faqQ, { textAlign: textDir }]}>❓ {item.q}</Text>
+            <Text style={[s.faqQ, { textAlign: textDir }]}>{item.q}</Text>
             <Text style={[s.faqA, { textAlign: textDir }]}>{item.a}</Text>
           </View>
         ))}
@@ -72,9 +75,13 @@ export function HelpCenterScreen(): React.ReactElement {
           <Text style={s.contactSub}>
             {language === 'ar' ? 'فريق الدعم لدينا متاح على مدار الساعة.' : 'Our support team is available 24/7.'}
           </Text>
-          <TouchableOpacity style={s.contactBtn} onPress={() => Linking.openURL('mailto:support@mentora.app')}>
+          <TouchableOpacity 
+            style={[s.contactBtn, isRTL && { flexDirection: 'row-reverse' }]} 
+            onPress={() => Linking.openURL('mailto:support@mentora.app')}
+          >
+            <Mail size={16} color="#161B22" style={isRTL ? { marginLeft: 8 } : { marginRight: 8 }} />
             <Text style={s.contactBtnText}>
-              {language === 'ar' ? '📧 راسلنا عبر البريد' : '📧 Email Support'}
+              {language === 'ar' ? 'راسلنا عبر البريد' : 'Email Support'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -120,8 +127,7 @@ const s = StyleSheet.create({
     borderBottomRightRadius: 24,
     marginBottom: 8,
   },
-  heroEmoji: {
-    fontSize: 48,
+  heroIconContainer: {
     marginBottom: 10,
   },
   heroTitle: {
@@ -191,6 +197,9 @@ const s = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   contactBtnText: {
     fontSize: 14,

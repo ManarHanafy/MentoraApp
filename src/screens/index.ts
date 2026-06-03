@@ -16,3 +16,5 @@ export { PrivacyPolicyScreen } from './PrivacyPolicyScreen';
 export { NotificationSettingsScreen } from './NotificationSettingsScreen';
 export { ChangePasswordScreen } from './ChangePasswordScreen';
 export { DeleteAccountScreen } from './DeleteAccountScreen';
+export { BreathingExerciseScreen } from './BreathingExerciseScreen';
+export { FirstLaunchOnboardingScreen } from './FirstLaunchOnboardingScreen';

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeftIcon } from '../components/Icons';
+import { Lock } from 'lucide-react-native';
 import { colors } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,7 +96,7 @@ export function PrivacyPolicyScreen(): React.ReactElement {
 
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.hero}>
-          <Text style={s.heroEmoji}>🔒</Text>
+          <Lock size={40} color="#38BDF8" style={{ marginBottom: 8 }} />
           <Text style={s.heroTitle}>
             {language === 'ar' ? 'خصوصيتك تهمنا' : 'Your Privacy Matters'}
           </Text>

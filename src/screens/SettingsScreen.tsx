@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../theme';
 import {
   ArrowLeftIcon, GlobeIcon, BellIcon, LockIcon, TrashIcon,
-  ChevronRightIcon, CheckCircleSolidIcon, ClipboardIcon
+  ChevronRightIcon, CheckCircleSolidIcon, ClipboardIcon, HelpCircleIcon
 } from '../components/Icons';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -49,6 +50,38 @@ export function SettingsScreen(): React.ReactElement {
               );
             } finally {
               setResetting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleRetakeTour = () => {
+    Alert.alert(
+      isRTL ? 'إعادة تشغيل الجولات الإرشادية' : 'Retake Guided Tours',
+      isRTL 
+        ? 'هل تريد إعادة تفعيل الجولات الإرشادية لصفحات الإحصاءات والملف الشخصي؟'
+        : 'Do you want to enable the guided walkthrough tours for both Insights and Profile screens again?',
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        { 
+          text: isRTL ? 'نعم، تفعيل' : 'Yes, Enable', 
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('@mentora_tour_insights_done');
+              await AsyncStorage.removeItem('@mentora_tour_profile_done');
+              Alert.alert(
+                isRTL ? 'نجاح' : 'Success',
+                isRTL 
+                  ? 'تمت إعادة تعيين الجولات الإرشادية بنجاح. ستظهر لك عند زيارتك القادمة لصفحتي الإحصاءات والملف الشخصي.'
+                  : 'Guided tours reset successfully. They will appear on your next visit to Insights and Profile screens.'
+              );
+            } catch (err: any) {
+              Alert.alert(
+                isRTL ? 'خطأ' : 'Error',
+                isRTL ? 'حدث خطأ غير متوقع.' : 'An error occurred. Please try again.'
+              );
             }
           }
         }
@@ -104,6 +137,16 @@ export function SettingsScreen(): React.ReactElement {
               <ChevronRightIcon size={20} color={colors.textPrimary} />
             )}
           </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.listItem, { flexDirection: rowDir }]} onPress={handleRetakeTour}>
+          <View style={[s.itemLeft, { flexDirection: rowDir }]}>
+            <HelpCircleIcon size={24} color={colors.textPrimary} />
+            <Text style={[s.itemText, isRTL && s.rtlItemText]}>
+              {isRTL ? 'إعادة تشغيل الجولة الإرشادية' : 'Retake Guided Tour'}
+            </Text>
+          </View>
+          <ChevronRightIcon size={20} color={colors.textPrimary} />
         </TouchableOpacity>
 
         <TouchableOpacity style={[s.listItem, { flexDirection: rowDir }]} onPress={() => navigation.navigate('ChangePassword')}>

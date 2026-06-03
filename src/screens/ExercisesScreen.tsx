@@ -1,64 +1,242 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput, ActivityIndicator, Modal, Linking, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput, ActivityIndicator, Modal, Linking, AppState, AppStateStatus, Alert, Animated } from 'react-native';
+import Svg, { Path, Circle, Rect, Defs, LinearGradient, Stop, Text as SvgText } from 'react-native-svg';
 import * as Notifications from 'expo-notifications';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, typography } from '../theme';
-import { ArrowLeftIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
+import { ArrowLeftIcon, StarIcon, ArrowRightIcon, ClockIcon, SearchIcon, LockIcon, CheckCircleSolidIcon, BrainIcon, JournalIcon } from '../components/Icons';
 import { Exercise, ExerciseService } from '../services/exerciseService';
 import { ChatService } from '../services/chatService';
+import { useLanguage } from '../context/LanguageContext';
+import { Leaf, Brain, Wind, Moon, Target, Waves, Users, Shield, Activity, Compass } from 'lucide-react-native';
 
-// Icons
-const SearchIcon = () => <Text style={{ color: '#A0AEC0', fontSize: 16 }}>🔍</Text>;
-const ClockIcon = () => <Text style={{ color: '#A0AEC0', fontSize: 12 }}>⏱</Text>;
-const HeartOutline = () => <Text style={{ color: '#FFFFFF', fontSize: 24 }}>♡</Text>;
-const PlayIcon = ({ color = '#161B22' }) => <Text style={{ fontSize: 16, color }}>▶</Text>;
+// Vector Icon Replacements for Emojis
+const HeartOutline = ({ size = 24, color = '#FFFFFF' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
+    <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+  </Svg>
+);
+
+const MeditationIcon = ({ size = 24, color = '#111827' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Circle cx="12" cy="5" r="2" />
+    <Path d="m9 22 3-6 3 6M12 16V9M5 12h14" />
+    <Path d="m17 10-2-3H9L7 10" />
+  </Svg>
+);
+
+const VideoIcon = ({ size = 20, color = '#991B1B' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+    <Path d="m8 21 4-4 4 4M12 17v4" />
+    <Path d="m10 8 5 3-5 3V8z" fill={color} />
+  </Svg>
+);
+
+const PlayIcon = ({ color = '#161B22', size = 16 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d="M8 5v14l11-7z" />
+  </Svg>
+);
+
+const LighthouseIcon = ({ size = 24, color = '#7C2D12' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M12 2v2M5 22h14M11 16h2M12 4v4M9 8h6M10 22l1.5-14h1L14 22" />
+  </Svg>
+);
+
+const SeedlingIcon = ({ size = 24, color = '#111827' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M12 22V12M12 12c0-2.8 2.2-5 5-5h4M12 14c0-3 2.2-5.5 5-5.5h2M12 14c0-3-2.2-5.5-5-5.5H3" />
+  </Svg>
+);
+
+const getExerciseIcon = (type: string, color = '#475569') => {
+  const t = type.toLowerCase();
+  if (t.includes('breath')) return <MeditationIcon color={color} size={24} />;
+  if (t.includes('cbt') || t.includes('cognitive') || t.includes('thought')) return <BrainIcon color={color} size={24} />;
+  if (t.includes('sleep')) return <ClockIcon color={color} size={24} />;
+  if (t.includes('mindful')) return <MeditationIcon color={color} size={24} />;
+  if (t.includes('relax')) return <SeedlingIcon color={color} size={24} />;
+  if (t.includes('safty') || t.includes('safety') || t.includes('social')) return <LighthouseIcon color={color} size={24} />;
+  return <SeedlingIcon color={color} size={24} />;
+};
+
+// Phases & Roadmap Configuration
+const ROADMAP_STRUCTURE = [
+  {
+    phaseId: 'awareness',
+    title: 'Phase 1: Awareness',
+    titleAr: 'المرحلة 1: الوعي الذاتي',
+    description: 'Learn to notice and track your emotional states and patterns.',
+    descriptionAr: 'تعلم كيفية ملاحظة وتتبع حالتك النفسية وأنماط تفكيرك.',
+    exerciseCodes: ['Encourage_First_Checkin', 'Thought_Awareness_Daily', 'Reality_Check_Journal_Weekly']
+  },
+  {
+    phaseId: 'thought_management',
+    title: 'Phase 2: Thought Management',
+    titleAr: 'المرحلة 2: إدارة الأفكار',
+    description: 'Challenge cognitive distortions and adopt balanced thinking.',
+    descriptionAr: 'تحدي التشوهات الإدراكية وتبني تفكير متوازن.',
+    exerciseCodes: ['Thought_Record_Basics', 'Challenge_Questions', 'Balanced_Thinking', 'Evidence_For_Against']
+  },
+  {
+    phaseId: 'behavior_change',
+    title: 'Phase 3: Behavior Change',
+    titleAr: 'المرحلة 3: تغيير السلوك',
+    description: 'Build healthy routines, streaks, and lasting resilience.',
+    descriptionAr: 'بناء عادات صحية، فترات تتبع، ومرونة نفسية مستدامة.',
+    exerciseCodes: ['One_Exercise_Today', 'Daily_Reminder_Set', 'Exercise_Challenge', 'Streak_Goal_3_Days']
+  }
+];
+
+// Exercise Stage Graphic Render for the Timer Overlay
+function ExerciseStageGraphic({ type }: { type: string }): React.ReactElement {
+  const cleanType = type.toLowerCase();
+  
+  if (cleanType.includes('breathing')) {
+    return (
+      <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+        <Defs>
+          <LinearGradient id="breathGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor="#38BDF8" stopOpacity={0.6} />
+            <Stop offset="100%" stopColor="#0EA5E9" stopOpacity={0.2} />
+          </LinearGradient>
+        </Defs>
+        <Circle cx="50" cy="50" r="40" fill="url(#breathGrad)" />
+        <Circle cx="50" cy="50" r="30" fill="url(#breathGrad)" opacity={0.6} />
+        <Circle cx="50" cy="50" r="20" fill="url(#breathGrad)" opacity={0.4} />
+        <Path d="M50 20 A30 30 0 0 1 80 50 A30 30 0 0 1 50 80 A30 30 0 0 1 20 50 A30 30 0 0 1 50 20" stroke="#38BDF8" strokeWidth={2} strokeDasharray="4 4" />
+      </Svg>
+    );
+  }
+
+  if (cleanType.includes('sleep')) {
+    return (
+      <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+        <Circle cx="20" cy="30" r="1.5" fill="#FFFFFF" opacity={0.8} />
+        <Circle cx="80" cy="20" r="2" fill="#FFFFFF" opacity={0.9} />
+        <Circle cx="75" cy="70" r="1.5" fill="#FFFFFF" opacity={0.7} />
+        <Circle cx="30" cy="80" r="2" fill="#FFFFFF" opacity={0.8} />
+        <Path d="M40 30 Q65 30 65 55 Q65 75 45 75 Q60 70 58 50 Q56 35 40 30 Z" fill="#FDE047" />
+        <Path d="M15 70 Q25 60 35 70 Q45 60 55 70 T75 70 L75 75 H15 Z" fill="#475569" opacity={0.5} />
+      </Svg>
+    );
+  }
+
+  if (cleanType.includes('cbt') || cleanType.includes('cognitive') || cleanType.includes('thought')) {
+    return (
+      <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+        <Rect x="15" y="35" width="25" height="25" rx="6" fill="#34D399" opacity={0.3} stroke="#34D399" strokeWidth={2} />
+        <SvgText x="20" y="50" fill="#FFFFFF" fontSize="10" fontWeight="bold">Neg</SvgText>
+        <Path d="M45 47 L60 47" stroke="#34D399" strokeWidth={3} strokeLinecap="round" />
+        <Path d="M55 42 L60 47 L55 52" stroke="#34D399" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        <Rect x="65" y="35" width="25" height="25" rx="6" fill="#059669" stroke="#34D399" strokeWidth={2} />
+        <SvgText x="69" y="50" fill="#FFFFFF" fontSize="10" fontWeight="bold">Bal</SvgText>
+        <Path d="M50 20 L52 25 L57 25 L53 28 L55 33 L50 30 L45 33 L47 28 L43 25 L48 25 Z" fill="#FBBF24" />
+      </Svg>
+    );
+  }
+
+  if (cleanType.includes('mindfulness')) {
+    return (
+      <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+        <Path d="M15 80 Q50 77 85 80" stroke="#C084FC" strokeWidth={2} fill="none" opacity={0.7} />
+        <Path d="M25 85 Q50 83 75 85" stroke="#C084FC" strokeWidth={1} fill="none" opacity={0.4} />
+        <Circle cx="50" cy="73" r="16" fill="#4B5563" />
+        <Circle cx="50" cy="55" r="12" fill="#6B7280" />
+        <Circle cx="50" cy="40" r="9" fill="#9CA3AF" />
+        <Path d="M50 25 Q45 15 50 10 Q55 15 50 25" fill="#C084FC" opacity={0.8} />
+        <Path d="M50 25 Q40 18 36 24 Q45 28 50 25" fill="#C084FC" opacity={0.6} />
+        <Path d="M50 25 Q60 18 64 24 Q55 28 50 25" fill="#C084FC" opacity={0.6} />
+      </Svg>
+    );
+  }
+
+  if (cleanType.includes('relax') || cleanType.includes('relaxation')) {
+    return (
+      <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+        <Path d="M10 30 Q30 25 50 30 T90 30" stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} fill="none" />
+        <Path d="M10 45 Q30 40 50 45 T90 45" stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} fill="none" />
+        <Path d="M30 75 Q40 50 65 40 Q55 65 30 75" fill="#4ADE80" opacity={0.8} />
+        <Path d="M45 60 Q60 45 75 40 Q65 55 45 60" fill="#4ADE80" opacity={0.6} />
+        <Path d="M22 80 L78 35" stroke="#22C55E" strokeWidth={3} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+
+  if (cleanType.includes('social') || cleanType.includes('safety') || cleanType.includes('safty')) {
+    return (
+      <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+        <Path d="M10 80 C 30 83, 40 77, 60 80 C 80 83, 90 77, 100 80 L 100 90 L 10 90 Z" fill="#7C2D12" opacity={0.5} />
+        <Path d="M50 25 L15 10 L10 25 Z" fill="#FEF08A" opacity={0.25} />
+        <Path d="M50 25 L85 10 L90 25 Z" fill="#FEF08A" opacity={0.25} />
+        <Path d="M43 75 L47 25 L53 25 L57 75 Z" fill="#FFFFFF" />
+        <Rect x="42" y="70" width="16" height="5" fill="#EF4444" />
+        <Rect x="44" y="50" width="12" height="5" fill="#EF4444" />
+        <Rect x="46" y="30" width="8" height="5" fill="#EF4444" />
+        <Rect x="47" y="20" width="6" height="5" fill="#FEF08A" />
+        <Circle cx="50" cy="18" r="3" fill="#FBBF24" />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={150} height={150} viewBox="0 0 100 100" style={{ marginBottom: 20 }}>
+      <Circle cx="50" cy="50" r="30" stroke="#38BDF8" strokeWidth={1} strokeDasharray="3 3" />
+      <Path d="M50 18 L59 36 L79 39 L65 53 L68 73 L50 63 L32 73 L35 53 L21 39 L41 36 Z" fill="#FBBF24" />
+    </Svg>
+  );
+}
 
 // التصنيفات الحقيقية من قاعدة بياناتك
 const CATEGORIES = ['All', 'CBT', 'Breathing', 'Sleep', 'Behavioral', 'Relaxation', 'Social', 'Safety', 'Mindfulness'];
 
 const TIPS = {
   All: {
-    title: '🌿 Exercise Benefits',
+    title: 'Exercise Benefits',
     points: ['Regular exercise improves mood', 'Reduces daily stress levels', 'Enhances mental clarity & focus']
   },
   CBT: {
-    title: '🧠 CBT Techniques',
+    title: 'CBT Techniques',
     points: ['Identify negative thought patterns', 'Challenge your core beliefs', 'Practice cognitive restructuring']
   },
   Breathing: {
-    title: '💨 Breathing Tips',
+    title: 'Breathing Tips',
     points: ['Focus on slow, deep inhales', 'Exhale longer than you inhale', 'Relax your shoulders and jaw']
   },
   Sleep: {
-    title: '😴 Sleep Hygiene',
+    title: 'Sleep Hygiene',
     points: ['Maintain a consistent schedule', 'Limit screen time before bed', 'Create a cool, dark environment']
   },
   Behavioral: {
-    title: '🎯 Activity Focus',
+    title: 'Activity Focus',
     points: ['Set small, achievable goals', 'Schedule rewarding activities', 'Track your daily energy levels']
   },
   Relaxation: {
-    title: '🌊 Deep Relaxation',
+    title: 'Deep Relaxation',
     points: ['Try progressive muscle relaxation', 'Visualize a peaceful place', 'Let go of physical tension']
   },
   Social: {
-    title: '🤝 Connection',
+    title: 'Connection',
     points: ['Reach out to a trusted friend', 'Share your feelings openly', 'Engage in community activities']
   },
   Safety: {
-    title: '🛡️ Safety Planning',
+    title: 'Safety Planning',
     points: ['Identify your safe triggers', 'Keep support contacts ready', 'Follow your personalized plan']
   },
   Mindfulness: {
-    title: '🧘 Mindfulness Guide',
+    title: 'Mindfulness Guide',
     points: ['Stay present in the moment', 'Observe without judgment', 'Focus on your bodily sensations']
   }
 };
 
 export function ExercisesScreen({ route }: any): React.ReactElement {
   const navigation = useNavigation<any>();
+  const { language, isRTL } = useLanguage();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [history, setHistory] = useState<Exercise[]>([]);
+  const [pendingQueue, setPendingQueue] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('All');
   const [search, setSearch] = useState('');
@@ -68,6 +246,30 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
   const [sessionFinished, setSessionFinished] = useState(false);
   const [isAiSession, setIsAiSession] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [showRoadmapModal, setShowRoadmapModal] = useState(false);
+  const breathAnim = React.useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (countdown !== null && !isPaused && ((suggestedExercise?.exerciseType || '').toLowerCase().includes('breath') || (suggestedExercise?.name || '').toLowerCase().includes('breath'))) {
+      const cycle = Animated.sequence([
+        Animated.timing(breathAnim, {
+          toValue: 1.4,
+          duration: 4000,
+          useNativeDriver: true
+        }),
+        Animated.delay(2000),
+        Animated.timing(breathAnim, {
+          toValue: 1.0,
+          duration: 4000,
+          useNativeDriver: true
+        }),
+        Animated.delay(2000)
+      ]);
+      Animated.loop(cycle).start();
+    } else {
+      breathAnim.stopAnimation();
+    }
+  }, [countdown, isPaused, suggestedExercise]);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,7 +291,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       // Send notification when leaving with an active timer
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: "Session Paused 🧘",
+          title: "Session Paused",
           body: `Don't forget to finish your ${suggestedExercise.name}. You have ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, '0')} left!`,
         },
         trigger: null, // send immediately
@@ -112,25 +314,30 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [all, completed, suggested] = await Promise.all([
-        ExerciseService.getAllExercises(),
+      const [completed, suggested] = await Promise.all([
         ExerciseService.getCompletedExercises(),
         ExerciseService.getSuggestedExercises()
       ]);
 
-      // List view: only show exercises the user has actually completed (Done ✅)
       const safeCompleted = completed || [];
       const uniqueCompleted = Array.from(new Map(safeCompleted.map(item => [item.id, item])).values());
-      // Always set exercises = only the ones the user did
-      setExercises(uniqueCompleted);
+      const safeSuggested = suggested || [];
+      
+      // Filter out suggested exercises that are already completed to avoid duplicate items
+      const suggestedNotInCompleted = safeSuggested.filter(s => 
+        !uniqueCompleted.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
+      );
+      
+      // Combine completed and active suggested exercises as the AI exercises list
+      const aiExercises = [...uniqueCompleted, ...suggestedNotInCompleted];
+      
+      setExercises(aiExercises);
       setHistory(uniqueCompleted);
-
-      // Show suggested exercise if requested (we take the first pending exercise from the queue)
-      const pendingQueue = suggested || [];
+      setPendingQueue(safeSuggested);
 
       if (route?.params?.openSuggested === true && !showHistoryOnly) {
         let ex = route.params.exerciseToStart;
-        if (!ex && pendingQueue.length > 0) ex = pendingQueue[0];
+        if (!ex && safeSuggested.length > 0) ex = safeSuggested[0];
         
         if (ex && !suggestedExercise) {
           // Enrich with library details if missing or generic
@@ -144,8 +351,8 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
              navigation.setParams({ exerciseToStart: null });
           }
         }
-      } else if (!showHistoryOnly && pendingQueue.length > 0 && !suggestedExercise) {
-        let ex = pendingQueue[0];
+      } else if (!showHistoryOnly && safeSuggested.length > 0 && !suggestedExercise) {
+        let ex = safeSuggested[0];
         if (ex.exerciseCode) {
            const details = ExerciseService.getExerciseDetailsByCode(ex.exerciseCode);
            ex = { ...ex, ...details };
@@ -157,6 +364,10 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       console.error(e);
     } finally {
       setLoading(false);
+      if (route?.params?.openRoadmap === true) {
+        setShowRoadmapModal(true);
+        navigation.setParams({ openRoadmap: undefined });
+      }
     }
   };
 
@@ -188,8 +399,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       setSessionFinished(false);
 
       // 4. Reload all data
-      const [all, completed, suggested] = await Promise.all([
-        ExerciseService.getAllExercises(),
+      const [completed, suggested] = await Promise.all([
         ExerciseService.getCompletedExercises(),
         ExerciseService.getSuggestedExercises()
       ]);
@@ -197,8 +407,12 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       const safeSuggested = suggested || [];
       const safeCompleted = completed || [];
       const uniqueCompleted = Array.from(new Map(safeCompleted.map(item => [item.id, item])).values());
+      const suggestedNotInCompleted = safeSuggested.filter(s => 
+        !uniqueCompleted.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
+      );
+      const aiExercises = [...uniqueCompleted, ...suggestedNotInCompleted];
 
-      setExercises(all || uniqueCompleted);
+      setExercises(aiExercises);
       setHistory(uniqueCompleted);
 
       // 5. Flow transition
@@ -226,17 +440,46 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     }
   };
 
+  const startRoadmapExercise = (code: string) => {
+    const details = ExerciseService.getExerciseDetailsByCode(code);
+    const exerciseObj: Exercise = {
+      id: code,
+      name: details.name || code,
+      description: details.description || '',
+      exerciseType: details.exerciseType || 'General',
+      durationMinutes: details.durationMinutes || 5,
+      difficulty: details.difficulty || 'Medium',
+      instructions: details.instructions || '',
+      isActive: true,
+      exerciseCode: code,
+      goals: details.goals,
+      frequency: details.frequency,
+      researchBasis: details.researchBasis,
+      tips: details.tips,
+      videoUrl: details.videoUrl,
+      videoTitle: details.videoTitle
+    };
+    setShowRoadmapModal(false);
+    setSuggestedExercise(exerciseObj);
+    setIsAiSession(true);
+    setShowHistoryOnly(false);
+    setSessionFinished(false);
+    setCountdown(null);
+  };
+
   const filteredExercises = exercises.filter(ex => {
-    const exType = (ex.exerciseType || '').toLowerCase();
-    const exName = (ex.name || '').toLowerCase();
-    const tab = activeTab.toLowerCase();
+    const exType = (ex.exerciseType || '').toLowerCase().trim();
+    const tab = activeTab.toLowerCase().trim();
 
     if (tab === 'all') return (ex.name && ex.name.toLowerCase().includes(search.toLowerCase()));
 
-    // Flexible matching for categories
-    const isMatched = exType.includes(tab) ||
-      exName.includes(tab) ||
-      (tab === 'cbt' && (exType.includes('cognitive') || exName.includes('cbt')));
+    // Strict category filtering: match strictly against exerciseType to prevent name-based leakage
+    let isMatched = false;
+    if (tab === 'cbt') {
+      isMatched = exType === 'cbt' || exType.includes('cognitive') || exType.includes('cbt');
+    } else {
+      isMatched = exType === tab || exType.includes(tab);
+    }
 
     return isMatched && (ex.name && ex.name.toLowerCase().includes(search.toLowerCase()));
   });
@@ -275,7 +518,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         <ScrollView style={s.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={s.floatingCard}>
             <View style={s.cardTopRow}>
-              <Text style={{ fontSize: 32 }}>🧘‍♂️</Text>
+              <MeditationIcon size={36} color={colors.primary} />
               <View style={s.cardStats}>
                 <View style={s.statCol}>
                   <Text style={s.statLabel}>Duration</Text>
@@ -321,13 +564,21 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                     </TouchableOpacity>
                   </View>
                 </View>
-              ) : hasTimer ? (
+              ) : ((ex.exerciseType || '').toLowerCase().includes('breath') || (ex.name || '').toLowerCase().includes('breath')) ? (
+                <TouchableOpacity 
+                  style={[s.startNowBtn, { backgroundColor: colors.primary, flexDirection: 'row', gap: 6 }]} 
+                  onPress={() => setCountdown(ex.durationMinutes * 60)}
+                >
+                  <PlayIcon color="#FFF" />
+                  <Text style={[s.startNowText, { color: '#FFF' }]}>{language === 'ar' ? 'جلسة تنفس موجهة' : 'Guided Breathing'}</Text>
+                </TouchableOpacity>
+              ) : (((ex.exerciseType || '').toLowerCase().includes('sleep') || (ex.exerciseType || '').toLowerCase().includes('relax') || (ex.exerciseType || '').toLowerCase().includes('mindful')) && (ex.durationMinutes || 0) > 0) ? (
                 <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
-                  <PlayIcon /><Text style={s.startNowText}>Start Timer ({ex.durationMinutes} min)</Text>
+                  <PlayIcon /><Text style={s.startNowText}>{language === 'ar' ? `بدء المؤقت (${ex.durationMinutes} د)` : `Start Timer (${ex.durationMinutes} min)`}</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity style={[s.startNowBtn, { backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                  <Text style={[s.startNowText, { color: colors.white }]}>Done ✅</Text>
+                  <Text style={[s.startNowText, { color: colors.white }]}>{language === 'ar' ? 'إكمال التمرين' : 'Complete Exercise'}</Text>
                 </TouchableOpacity>
               )
             ) : (
@@ -335,17 +586,17 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
             )}
           </View>
 
-          <Text style={s.sectionTitle}>Overview</Text>
+          <Text style={s.sectionTitle}>{language === 'ar' ? 'نظرة عامة' : 'Overview'}</Text>
           <View style={s.overviewBox}>
             <Text style={s.overviewText}>
-              {ex.description || 'A personalized wellness exercise to help you feel better.'}
+              {ex.description || (language === 'ar' ? 'تمرين صحي مخصص لمساعدتك على الشعور بالتحسن.' : 'A personalized wellness exercise to help you feel better.')}
             </Text>
           </View>
 
           {/* Goals Section */}
           {ex.goals && ex.goals.length > 0 ? (
             <>
-              <Text style={s.sectionTitle}>Goals 🎯</Text>
+              <Text style={s.sectionTitle}>{language === 'ar' ? 'الأهداف' : 'Goals'}</Text>
               <View style={s.goalsContainer}>
                 {ex.goals.map((goal: string, idx: number) => (
                   <View key={idx} style={s.goalTag}>
@@ -359,7 +610,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           {/* Research Basis Section */}
           {ex.researchBasis ? (
             <View style={s.researchBox}>
-              <Text style={s.researchTitle}>🔬 Evidence Base</Text>
+              <Text style={s.researchTitle}>{language === 'ar' ? 'الأساس العلمي' : 'Evidence Base'}</Text>
               <Text style={s.researchText}>{ex.researchBasis}</Text>
             </View>
           ) : null}
@@ -367,7 +618,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           {/* Tutorial / Steps Section */}
           {ex.instructions ? (
             <>
-              <Text style={s.sectionTitle}>How to Do It 📝</Text>
+              <Text style={s.sectionTitle}>{language === 'ar' ? 'طريقة أداء التمرين' : 'How to Do It'}</Text>
               {ex.instructions.split(/(?:\n|->)/).filter(s => s.trim().length > 2).map((step, idx) => {
                 const isLink = step.includes('http');
                 const cleanStep = step.trim().replace(/^\d+[\.\-]\s*/, '');
@@ -388,7 +639,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           {/* Tips Section */}
           {ex.tips ? (
             <View style={s.tipsBox}>
-              <Text style={s.tipsTitle}>💡 Pro Tip</Text>
+              <Text style={s.tipsTitle}>{language === 'ar' ? 'نصيحة الخبراء' : 'Pro Tip'}</Text>
               <Text style={s.tipsText}>{ex.tips}</Text>
             </View>
           ) : null}
@@ -399,9 +650,10 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
               style={s.videoButton} 
               onPress={() => Linking.openURL(ex.videoUrl as string).catch(err => console.error("Could not open video URL", err))}
             >
-              <Text style={{ fontSize: 18, marginRight: 8 }}>📺</Text>
+              <VideoIcon size={20} color="#991B1B" />
+              <View style={{ width: 8 }} />
               <Text style={s.videoButtonText} numberOfLines={1}>
-                {ex.videoTitle || 'Watch Video Tutorial'}
+                {ex.videoTitle || (language === 'ar' ? 'مشاهدة الفيديو التوضيحي' : 'Watch Video Tutorial')}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -412,21 +664,495 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           <View style={{ height: 40 }} />
         </ScrollView>
 
-        <Modal visible={countdown !== null} transparent animationType="fade">
-          <View style={s.countdownOverlay}>
-            <Text style={s.countdownText}>{Math.floor(countdown! / 60)}:{String(countdown! % 60).padStart(2, '0')}</Text>
-            <Text style={s.countdownSubText}>{isPaused ? 'Paused' : 'Focus and breathe...'}</Text>
-            {isPaused ? (
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity style={[s.cancelBtn, { backgroundColor: colors.success }]} onPress={() => setIsPaused(false)}><Text style={s.cancelText}>Resume</Text></TouchableOpacity>
-                <TouchableOpacity style={[s.cancelBtn, { backgroundColor: '#f44' }]} onPress={() => { setCountdown(null); setIsPaused(false); }}><Text style={s.cancelText}>Close</Text></TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setIsPaused(true)}><Text style={s.cancelText}>Pause / Stop</Text></TouchableOpacity>
-            )}
-          </View>
+        <Modal visible={countdown !== null} transparent={false} animationType="slide">
+          {(() => {
+            const exType = (suggestedExercise?.exerciseType || '').toLowerCase();
+            const exName = suggestedExercise?.name || '';
+            const instructions = suggestedExercise?.instructions || '';
+            const totalDurationSeconds = (suggestedExercise?.durationMinutes || 5) * 60;
+            const elapsedSeconds = totalDurationSeconds - (countdown || 0);
+            const progressPercent = Math.min(100, Math.round((elapsedSeconds / totalDurationSeconds) * 100));
+
+            // Split instructions into visual steps
+            const stepItems = instructions.split(/(?:\n|->)/).filter(s => s.trim().length > 2).map(s => s.trim().replace(/^\d+[\.\-]\s*/, ''));
+
+            // Choose theme color based on exercise category (keeping existing colors & branding)
+            let accentColor: string = colors.primary; // default brand color
+            let lightBg = '#F8FAFC';
+            const isRTL = language === 'ar';
+            
+            if (exType.includes('breath')) {
+              accentColor = '#0EA5E9'; // sky blue
+              lightBg = '#F0F9FF';
+            } else if (exType.includes('sleep')) {
+              accentColor = '#6366F1'; // indigo
+              lightBg = '#EEF2FF';
+            } else if (exType.includes('cbt') || exType.includes('cognitive')) {
+              accentColor = '#10B981'; // emerald
+              lightBg = '#ECFDF5';
+            } else if (exType.includes('mindful')) {
+              accentColor = '#8B5CF6'; // purple
+              lightBg = '#F5F3FF';
+            } else if (exType.includes('relax')) {
+              accentColor = '#22C55E'; // green
+              lightBg = '#F0FDF4';
+            }
+
+            return (
+              <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+                {/* Header */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 20,
+                  paddingVertical: 16,
+                  borderBottomWidth: 1,
+                  borderBottomColor: '#E2E8F0',
+                  backgroundColor: '#FFFFFF'
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: accentColor }} />
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: accentColor, textTransform: 'uppercase', letterSpacing: 1 }}>
+                      {suggestedExercise?.exerciseType || 'Exercise Session'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={{
+                      paddingVertical: 6,
+                      paddingHorizontal: 12,
+                      borderRadius: 8,
+                      backgroundColor: '#F1F5F9'
+                    }}
+                    onPress={() => {
+                      setCountdown(null);
+                      setIsPaused(false);
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#EF4444' }}>
+                      {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, alignItems: 'center' }}>
+                  {/* Title & Static Instructions */}
+                  <Text style={{ fontSize: 22, fontWeight: '800', color: '#1E293B', textAlign: 'center', marginBottom: 12 }}>
+                    {exName}
+                  </Text>
+
+                  {/* Active Exercise experience container */}
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 24,
+                    padding: 20,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    alignItems: 'center',
+                    marginBottom: 24,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.03,
+                    shadowRadius: 8,
+                    elevation: 1
+                  }}>
+                    {/* Render different dynamic visuals based on exercise type */}
+                    {(() => {
+                      if (exType.includes('breath') || exName.toLowerCase().includes('breath')) {
+                        // 1. BREATHING FLOW (with pulsing animation)
+                        const breathSec = elapsedSeconds % 12;
+                        let breathStateText = language === 'ar' ? 'شهيق بلطف...' : 'Inhale gently...';
+                        let breathStateSub = language === 'ar' ? 'املأ رئتيك بالهواء الصافي' : 'Fill your lungs with fresh air';
+                        if (breathSec >= 4 && breathSec < 6) {
+                          breathStateText = language === 'ar' ? 'احبس نفسك...' : 'Hold your breath...';
+                          breathStateSub = language === 'ar' ? 'ابقَ هادئاً ومرتاحاً' : 'Remain calm and still';
+                        } else if (breathSec >= 6 && breathSec < 10) {
+                          breathStateText = language === 'ar' ? 'زفير بطيء...' : 'Exhale slowly...';
+                          breathStateSub = language === 'ar' ? 'أطلق كل التوتر والضغوطات' : 'Let go of all tension and worry';
+                        } else if (breathSec >= 10) {
+                          breathStateText = language === 'ar' ? 'احبس نفسك...' : 'Hold your breath...';
+                          breathStateSub = language === 'ar' ? 'تهيأ للدورة التالية' : 'Prepare for the next cycle';
+                        }
+
+                        return (
+                          <View style={{ alignItems: 'center', marginVertical: 10 }}>
+                            <Animated.View style={{
+                              width: 140,
+                              height: 140,
+                              borderRadius: 70,
+                              backgroundColor: lightBg,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              transform: [{ scale: breathAnim }],
+                              borderWidth: 2,
+                              borderColor: accentColor,
+                              marginBottom: 24,
+                              shadowColor: accentColor,
+                              shadowOffset: { width: 0, height: 4 },
+                              shadowOpacity: 0.1,
+                              shadowRadius: 8,
+                            }}>
+                              <View style={{
+                                width: 90,
+                                height: 90,
+                                borderRadius: 45,
+                                backgroundColor: accentColor,
+                                opacity: 0.8,
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                              }}>
+                                {getExerciseIcon('breathing', '#FFFFFF')}
+                              </View>
+                            </Animated.View>
+
+                            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 4 }}>
+                              {breathStateText}
+                            </Text>
+                            <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', paddingHorizontal: 12 }}>
+                              {breathStateSub}
+                            </Text>
+                          </View>
+                        );
+                      } else if (exType.includes('mindful')) {
+                        // 2. MINDFULNESS FLOW (guidance texts)
+                        const mindfulnessPromptsEn = [
+                          "Observe the flow of your natural breath without trying to change it.",
+                          "Notice the physical sensations of your body resting on the chair.",
+                          "Let any thoughts float away like clouds in a wide blue sky.",
+                          "Bring your awareness back to the physical touch of the cool air.",
+                          "Allow yourself to simply be in this present moment, free of judgment."
+                        ];
+                        const mindfulnessPromptsAr = [
+                          "راقب تدفق أنفاسك الطبيعية دون محاولة تغييرها.",
+                          "انتبه للأحاسيس الجسدية أثناء جلوسك أو استلقائك.",
+                          "دع أي أفكار تطرأ تتلاشى كالسحب في سماء زرقاء واسعة.",
+                          "أعد وعيك إلى الشعور بملامسة الهواء الخارجي لبشرتك.",
+                          "اسمح لنفسك بأن تكون موجوداً في هذه اللحظة الحالية فقط، دون إطلاق أحكام."
+                        ];
+                        const promptIdx = Math.floor(elapsedSeconds / 15) % mindfulnessPromptsEn.length;
+                        const activePrompt = language === 'ar' ? mindfulnessPromptsAr[promptIdx] : mindfulnessPromptsEn[promptIdx];
+
+                        return (
+                          <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                            <View style={{
+                              width: 80,
+                              height: 80,
+                              borderRadius: 40,
+                              backgroundColor: lightBg,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              marginBottom: 20,
+                              borderWidth: 1,
+                              borderColor: accentColor
+                            }}>
+                              {getExerciseIcon('mindfulness', accentColor)}
+                            </View>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: accentColor, textTransform: 'uppercase', marginBottom: 8 }}>
+                              {language === 'ar' ? 'توجيهات اليقظة الذهنية' : 'Mindful Guidance'}
+                            </Text>
+                            <Text style={{ fontSize: 16, color: '#1E293B', fontWeight: '600', textAlign: 'center', lineHeight: 24, paddingHorizontal: 16 }}>
+                              "{activePrompt}"
+                            </Text>
+                          </View>
+                        );
+                      } else if (exType.includes('relax')) {
+                        // 3. RELAXATION FLOW (steps list with active highlight)
+                        const relaxationStepsEn = [
+                          "Relax your face. Tense your jaw and forehead for 5s, then completely relax.",
+                          "Drop your shoulders. Rotate them slowly, release all tightness.",
+                          "Relax your arms and hands. Let your fingers rest loosely by your side.",
+                          "Take deep abdominal breaths, expanding your stomach and chest.",
+                          "Relax your legs and feet. Let your entire body sink deeply into the floor."
+                        ];
+                        const relaxationStepsAr = [
+                          "أرخِ وجهك. شد فكك وجبهتك لمدة 5 ثوانٍ، ثم استرخِ تماماً.",
+                          "أنزل كتفيك. دورهما ببطء، وتخلص من كل شد وعقد عضلية.",
+                          "أرخِ ذراعيك ويديك. دع أصابعك ترتاح بمرونة واسترخاء تام.",
+                          "خذ أنفاساً عميقة من البطن، مع توسيع معدتك وصدرك.",
+                          "أرخِ ساقيك وقدميك. دع جسمك بالكامل يغرق في استرخاء عميق."
+                        ];
+                        const stepIdx = Math.floor(elapsedSeconds / 30) % relaxationStepsEn.length;
+                        const currentStepEn = relaxationStepsEn[stepIdx];
+                        const currentStepAr = relaxationStepsAr[stepIdx];
+
+                        return (
+                          <View style={{ width: '100%' }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: accentColor, textTransform: 'uppercase', marginBottom: 12, textAlign: 'center' }}>
+                              {language === 'ar' ? `الخطوة ${stepIdx + 1} من 5` : `Step ${stepIdx + 1} of 5`}
+                            </Text>
+                            
+                            {/* Relaxation steps listing */}
+                            {relaxationStepsEn.map((stepEn, idx) => {
+                              const isActive = idx === stepIdx;
+                              const stepText = language === 'ar' ? relaxationStepsAr[idx] : stepEn;
+                              return (
+                                <View key={idx} style={{
+                                  backgroundColor: isActive ? lightBg : '#FFFFFF',
+                                  borderRadius: 12,
+                                  padding: 12,
+                                  marginBottom: 8,
+                                  borderWidth: 1.5,
+                                  borderColor: isActive ? accentColor : '#F1F5F9',
+                                  opacity: isActive ? 1 : 0.4
+                                }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '700', color: isActive ? '#1E293B' : '#64748B', textAlign: isRTL ? 'right' : 'left' }}>
+                                    {stepText}
+                                  </Text>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      } else {
+                        // 4. CBT / GENERAL FLOW (thought challenging prompts)
+                        const cbtPromptsEn = [
+                          "Identify: What automatic thought is running through your mind right now?",
+                          "Examine: What objective evidence supports this thought? What contradicts it?",
+                          "Distortion check: Are you jumping to conclusions or catastrophizing?",
+                          "Reframing: How would you advise a close friend facing this same situation?",
+                          "Balanced View: Formulate a more realistic, balanced perspective based on the facts."
+                        ];
+                        const cbtPromptsAr = [
+                          "تحديد الفكرة: ما هي الفكرة التلقائية التي تدور في ذهنك حالياً؟",
+                          "فحص الأدلة: ما هي الأدلة الموضوعية التي تدعم هذه الفكرة؟ وما الأدلة التي تنفيها؟",
+                          "مراجعة التشوهات: هل تقوم بالقفز إلى الاستنتاجات أو تضخيم الأمور؟",
+                          "إعادة التأطير: كيف تنصح صديقاً مقرباً يمر بنفس هذا الموقف تماماً؟",
+                          "منظور متوازن: صغ وجهة نظر أكثر واقعية وتوازناً بناءً على الحقائق المتاحة."
+                        ];
+                        const promptIdx = Math.floor(elapsedSeconds / 20) % cbtPromptsEn.length;
+                        const activePrompt = language === 'ar' ? cbtPromptsAr[promptIdx] : cbtPromptsEn[promptIdx];
+
+                        return (
+                          <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                            <View style={{
+                              width: 80,
+                              height: 80,
+                              borderRadius: 40,
+                              backgroundColor: lightBg,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              marginBottom: 20,
+                              borderWidth: 1,
+                              borderColor: accentColor
+                            }}>
+                              {getExerciseIcon(suggestedExercise?.exerciseType || '', accentColor)}
+                            </View>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: accentColor, textTransform: 'uppercase', marginBottom: 8 }}>
+                              {language === 'ar' ? 'التحليل المعرفي والسلوكي' : 'CBT Thought Reframing'}
+                            </Text>
+                            <Text style={{ fontSize: 15, color: '#1E293B', fontWeight: '700', textAlign: 'center', lineHeight: 22, paddingHorizontal: 12 }}>
+                              {activePrompt}
+                            </Text>
+                          </View>
+                        );
+                      }
+                    })()}
+                  </View>
+
+                  {/* Exercise Instructions Step List (Integrated nicely at the bottom) */}
+                  <View style={{ width: '100%', marginBottom: 24 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#1E293B', marginBottom: 12, width: '100%', textAlign: isRTL ? 'right' : 'left' }}>
+                      {language === 'ar' ? 'طريقة أداء هذا التمرين:' : 'How to Practice:'}
+                    </Text>
+                    {stepItems.slice(0, 3).map((step, idx) => (
+                      <View key={idx} style={{
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 12,
+                        padding: 14,
+                        marginBottom: 8,
+                        borderWidth: 1,
+                        borderColor: '#E2E8F0',
+                        alignItems: 'center',
+                        gap: 12
+                      }}>
+                        <View style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: lightBg,
+                          borderWidth: 1,
+                          borderColor: accentColor,
+                          justifyContent: 'center',
+                          alignItems: 'center'
+                        }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: accentColor }}>{idx + 1}</Text>
+                        </View>
+                        <Text style={{ flex: 1, fontSize: 13, color: '#475569', textAlign: isRTL ? 'right' : 'left' }}>
+                          {step}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Giant Integrated Timer & Progress bar console */}
+                  <View style={{
+                    width: '100%',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 20,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    alignItems: 'center',
+                    marginBottom: 30
+                  }}>
+                    {/* Time Counter */}
+                    <Text style={{ fontSize: 36, fontWeight: '800', color: '#1E293B', letterSpacing: 2, marginBottom: 8 }}>
+                      {Math.floor(countdown! / 60).toString().padStart(2, '0')}:{(countdown! % 60).toString().padStart(2, '0')}
+                    </Text>
+
+                    {/* Progress Percentage Indicator & Bar */}
+                    <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', justifyContent: 'space-between', width: '100%', marginBottom: 8 }}>
+                      <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '700' }}>
+                        {language === 'ar' ? 'مؤشر التقدم' : 'Progress'}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: accentColor, fontWeight: '700' }}>
+                        {progressPercent}%
+                      </Text>
+                    </View>
+                    <View style={{ height: 6, width: '100%', backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden', marginBottom: 16 }}>
+                      <View style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: accentColor }} />
+                    </View>
+
+                    {/* Controls */}
+                    <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          backgroundColor: isPaused ? '#10B981' : '#F59E0B',
+                          paddingVertical: 12,
+                          borderRadius: 12,
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        onPress={() => setIsPaused(!isPaused)}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>
+                          {isPaused ? (language === 'ar' ? 'استئناف' : 'Resume') : (language === 'ar' ? 'إيقاف مؤقت' : 'Pause')}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#EF4444',
+                          paddingVertical: 12,
+                          borderRadius: 12,
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        onPress={() => {
+                          setCountdown(null);
+                          setIsPaused(false);
+                        }}
+                      >
+                        <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>
+                          {language === 'ar' ? 'إغلاق' : 'Close'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </ScrollView>
+              </SafeAreaView>
+            );
+          })()}
         </Modal>
       </View>
+    );
+
+  }
+
+  // If first-time user and there are no suggested or completed exercises, show the empty state screen
+  const hasUserExercises = history.length > 0 || pendingQueue.length > 0;
+
+  if (!loading && !hasUserExercises) {
+    return (
+      <SafeAreaView style={[s.safeArea, { backgroundColor: '#F8FAFC' }]}>
+        <View style={[s.listHeaderRow, { borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingBottom: 12, paddingHorizontal: 20 }]}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><ArrowLeftIcon size={24} color={colors.textPrimary} /></TouchableOpacity>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, marginLeft: 12 }}>
+            {language === 'ar' ? 'التمارين العلاجية' : 'Therapeutic Exercises'}
+          </Text>
+        </View>
+
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+          <View style={{
+            width: 72,
+            height: 72,
+            borderRadius: 36,
+            backgroundColor: '#F1F5F9',
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 20,
+            borderWidth: 1,
+            borderColor: '#E2E8F0',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 2
+          }}>
+            <LockIcon size={32} color={colors.primary} />
+          </View>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#1E293B', textAlign: 'center', marginBottom: 12 }}>
+            {language === 'ar' ? 'ابدأ رحلتك لتفعيل التمارين' : 'Unlock Your Exercises'}
+          </Text>
+          <Text style={{ fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 32, paddingHorizontal: 10 }}>
+            {language === 'ar'
+              ? 'مساحة تمارينك فارغة حالياً. ابدأ الدردشة مع المساعد الذكي أو سجل يومياتك للحصول على تمارين مخصصة تناسب احتياجاتك الحالية.'
+              : 'Your exercise space is currently empty. Start a conversation with your AI Companion or write a journal entry to get personalized exercises tailored for you.'}
+          </Text>
+
+          <TouchableOpacity
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 12,
+              paddingVertical: 14,
+              paddingHorizontal: 24,
+              width: '100%',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: 8,
+              marginBottom: 12,
+              shadowColor: colors.primary,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              elevation: 4
+            }}
+            onPress={() => navigation.navigate('Main', { screen: 'Chat' })}
+          >
+            <BrainIcon color={colors.white} size={20} />
+            <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>
+              {language === 'ar' ? 'تحدث مع المساعد الذكي' : 'Chat with AI Companion'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 12,
+              paddingVertical: 14,
+              paddingHorizontal: 24,
+              width: '100%',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: 8,
+              borderWidth: 1.5,
+              borderColor: '#E2E8F0'
+            }}
+            onPress={() => navigation.navigate('Main', { screen: 'Journal' })}
+          >
+            <JournalIcon color={colors.textPrimary} size={18} focused={true} />
+            <Text style={{ color: colors.textPrimary, fontWeight: '800', fontSize: 15 }}>
+              {language === 'ar' ? 'سجل تدوين جديد' : 'Write a Journal Entry'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -440,11 +1166,28 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
         <View style={s.tabsContainer}>
-          {CATEGORIES.map(cat => (
-            <TouchableOpacity key={cat} style={[s.tabPill, activeTab === cat && s.tabPillActive]} onPress={() => setActiveTab(cat)}>
-              <Text style={[s.tabText, activeTab === cat && s.tabTextActive]}>{cat}</Text>
-            </TouchableOpacity>
-          ))}
+          {CATEGORIES.map(cat => {
+            let label = cat;
+            if (language === 'ar') {
+              const m: Record<string, string> = {
+                'All': 'الكل',
+                'CBT': 'سلوكي معرفي',
+                'Breathing': 'تنفس',
+                'Sleep': 'نوم',
+                'Behavioral': 'سلوكي',
+                'Relaxation': 'استرخاء',
+                'Social': 'اجتماعي',
+                'Safety': 'سلامة',
+                'Mindfulness': 'يقظة ذهنية'
+              };
+              label = m[cat] || cat;
+            }
+            return (
+              <TouchableOpacity key={cat} style={[s.tabPill, activeTab === cat && s.tabPillActive]} onPress={() => setActiveTab(cat)}>
+                <Text style={[s.tabText, activeTab === cat && s.tabTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
 
@@ -454,13 +1197,45 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         activeTab === 'All' ? s.featuredCardLarge : s.featuredCardSmall
       ]}>
         <View style={s.featuredHeader}>
-          <Text style={{ fontSize: 24, marginRight: 8 }}>{tipData.title.split(' ')[0]}</Text>
-          <Text style={s.featuredHeaderText}>{activeTab === 'All' ? 'Wellness Tip' : `${activeTab} Guide`}</Text>
+          {(() => {
+            const iconSize = 24;
+            let iconColor = '#FFFFFF';
+            switch(activeTab) {
+              case 'CBT': iconColor = '#10B981'; break;      // emerald green
+              case 'Breathing': iconColor = '#0EA5E9'; break;    // sky blue
+              case 'Sleep': iconColor = '#6366F1'; break;        // indigo
+              case 'Behavioral': iconColor = '#F43F5E'; break;   // rose
+              case 'Relaxation': iconColor = '#34D399'; break;   // mint
+              case 'Social': iconColor = '#FB7185'; break;       // coral pink
+              case 'Safety': iconColor = '#EF4444'; break;       // red
+              case 'Mindfulness': iconColor = '#A78BFA'; break;  // purple
+              default: iconColor = '#34D399'; break;             // mint leaf
+            }
+
+            const iconStyle = isRTL ? { marginLeft: 8 } : { marginRight: 8 };
+
+            switch(activeTab) {
+              case 'CBT': return <Brain size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Breathing': return <Wind size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Sleep': return <Moon size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Behavioral': return <Target size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Relaxation': return <Waves size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Social': return <Users size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Safety': return <Shield size={iconSize} color={iconColor} style={iconStyle} />;
+              case 'Mindfulness': return <Activity size={iconSize} color={iconColor} style={iconStyle} />;
+              default: return <Leaf size={iconSize} color={iconColor} style={iconStyle} />;
+            }
+          })()}
+          <Text style={[s.featuredHeaderText, isRTL && { textAlign: 'right' }]}>
+            {activeTab === 'All'
+              ? (language === 'ar' ? 'نصيحة الصحة النفسية اليومية' : 'Wellness Tip')
+              : (language === 'ar' ? `دليل ${activeTab === 'CBT' ? 'العلاج المعرفي السلوكي' : activeTab === 'Breathing' ? 'تمارين التنفس' : activeTab === 'Sleep' ? 'تحسين النوم' : activeTab === 'Behavioral' ? 'العلاج السلوكي' : activeTab === 'Relaxation' ? 'الاسترخاء العميق' : activeTab === 'Social' ? 'التواصل الاجتماعي' : activeTab === 'Safety' ? 'خطة السلامة' : activeTab === 'Mindfulness' ? 'اليقظة الذهنية' : activeTab}` : `${activeTab} Guide`)}
+          </Text>
         </View>
-        <Text style={s.featuredTitle}>{tipData.title.split(' ').slice(1).join(' ')}</Text>
+        <Text style={[s.featuredTitle, isRTL && { textAlign: 'right' }]}>{tipData.title}</Text>
         <View style={{ marginTop: 8 }}>
           {tipData.points.map((pt, idx) => (
-            <Text key={idx} style={activeTab === 'All' ? s.featuredDesc : s.featuredDescSmall}>• {pt}</Text>
+            <Text key={idx} style={[activeTab === 'All' ? s.featuredDesc : s.featuredDescSmall, isRTL && { textAlign: 'right' }]}>• {pt}</Text>
           ))}
         </View>
       </View>
@@ -469,13 +1244,73 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       {activeTab !== 'All' && <View style={s.separatorLine} />}
 
       <ScrollView style={s.listContainer}>
+        {activeTab === 'All' && !loading && (() => {
+          const completedCount = history.length;
+          const activeSuggested = pendingQueue.filter(s => 
+            !history.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
+          );
+          const totalCount = completedCount + activeSuggested.length;
+          const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+          return (
+            <View style={{
+              backgroundColor: '#1E293B',
+              borderRadius: 20,
+              padding: 20,
+              marginBottom: 24,
+              shadowColor: '#1E293B',
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.15,
+              shadowRadius: 16,
+              elevation: 8
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {language === 'ar' ? 'تقدم خارطة الطريق' : 'ROADMAP PROGRESS'}
+                </Text>
+                <View style={{ backgroundColor: '#10B981', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>{progressPercent}%</Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: '#FFFFFF', marginBottom: 16 }}>
+                {language === 'ar' ? 'خارطة طريق الصحة النفسية' : 'Mental Wellness Roadmap'}
+              </Text>
+              {/* Progress Bar */}
+              <View style={{ height: 6, backgroundColor: '#334155', borderRadius: 3, overflow: 'hidden', marginBottom: 20 }}>
+                <View style={{ height: '100%', width: `${progressPercent}%`, backgroundColor: '#10B981' }} />
+              </View>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 12,
+                  paddingVertical: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 6
+                }}
+                onPress={() => setShowRoadmapModal(true)}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B' }}>
+                  {language === 'ar' ? 'عرض خارطة الطريق الكاملة' : 'View Full Roadmap'}
+                </Text>
+                <ArrowRightIcon size={14} color="#1E293B" />
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
+
         {loading ? <ActivityIndicator size="large" color={colors.primary} /> : (
           filteredExercises.length === 0 ? (
             <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 48, marginBottom: 16 }}>✅</Text>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>No completed exercises yet</Text>
+              <CheckCircleSolidIcon size={48} color={colors.primary} />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary, textAlign: 'center', marginTop: 16, marginBottom: 8 }}>
+                {language === 'ar' ? 'لا توجد تمارين مكتملة بعد' : 'No completed exercises yet'}
+              </Text>
               <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 18 }}>
-                Exercises you complete through AI recommendations will appear here. Start a chat or write a journal entry to get your first suggestion!
+                {language === 'ar'
+                  ? 'التمارين التي تكملها من خلال التوصيات ستظهر هنا. ابدأ محادثة أو سجل تدوينة للحصول على توصيتك الأولى!'
+                  : 'Exercises you complete through AI recommendations will appear here. Start a chat or write a journal entry to get your first suggestion!'}
               </Text>
             </View>
           ) :
@@ -491,7 +1326,10 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                   setCountdown(null);
                 }}
               >
-                <View style={s.cardLeft}><View style={s.iconBox}><Text style={{ fontSize: 24 }}>🧘‍♂️</Text></View>
+                <View style={s.cardLeft}>
+                  <View style={s.iconBox}>
+                    {getExerciseIcon(ex.exerciseType, colors.primary)}
+                  </View>
                   <View style={s.cardBody}><Text style={s.cardTitle}>{ex.name}</Text><Text style={s.cardDesc} numberOfLines={1}>{ex.description}</Text>
                     <View style={s.metaRow}><ClockIcon /><Text style={s.metaText}>{ex.durationMinutes}m</Text>
                       {history.some(h => h.id === ex.id) && <View style={s.doneTag}><Text style={s.doneTagText}>COMPLETED</Text></View>}
@@ -503,6 +1341,260 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
             ))
         )}
       </ScrollView>
+
+      {/* FULL ROADMAP PROGRESS TIMELINE MODAL */}
+      <Modal visible={showRoadmapModal} animationType="slide" transparent={false}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+          {/* Header */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 20,
+            paddingVertical: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: '#E2E8F0',
+            backgroundColor: '#FFFFFF'
+          }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1E293B' }}>
+              {language === 'ar' ? 'خارطة طريق التمارين' : 'Exercise Roadmap'}
+            </Text>
+            <TouchableOpacity
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                backgroundColor: '#F1F5F9'
+              }}
+              onPress={() => setShowRoadmapModal(false)}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#64748B' }}>
+                {language === 'ar' ? 'إغلاق' : 'Close'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={{ flex: 1, padding: 20 }}>
+            {/* Description card */}
+            <View style={{
+              backgroundColor: '#EFF6FF',
+              borderRadius: 16,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: '#DBEAFE',
+              marginBottom: 24
+            }}>
+              <Text style={{ fontSize: 14, color: '#1E40AF', lineHeight: 20 }}>
+                {language === 'ar'
+                  ? 'تابع تقدمك خطوة بخطوة. أكمل تمارين كل مرحلة لفتح التمارين المتقدمة التالية وتعزيز صحتك النفسية.'
+                  : 'Track your mental wellness progress step-by-step. Complete exercises in each phase to unlock the next level and build psychological resilience.'}
+              </Text>
+            </View>
+
+            {/* Stages / Phases timeline */}
+            {(() => {
+              const dynamicPhases = [];
+              
+              if (history.length > 0) {
+                dynamicPhases.push({
+                  phaseId: 'completed_milestones',
+                  title: language === 'ar' ? 'المرحلة 1: الإنجازات المكتملة' : 'Phase 1: Completed Milestones',
+                  titleAr: 'المرحلة 1: الإنجازات المكتملة',
+                  description: language === 'ar' ? 'التمارين المقترحة من الذكاء الاصطناعي التي أكملتها بنجاح.' : 'AI-recommended exercises you have successfully completed.',
+                  descriptionAr: 'التمارين المقترحة من الذكاء الاصطناعي التي أكملتها بنجاح.',
+                  exercises: history
+                });
+              }
+              
+              const activeSuggested = pendingQueue.filter(s => 
+                !history.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
+              );
+              
+              if (activeSuggested.length > 0) {
+                const phaseNum = dynamicPhases.length + 1;
+                dynamicPhases.push({
+                  phaseId: 'active_recommendations',
+                  title: language === 'ar' ? `المرحلة ${phaseNum}: التوصيات النشطة` : `Phase ${phaseNum}: Active Recommendations`,
+                  titleAr: `المرحلة ${phaseNum}: التوصيات النشطة`,
+                  description: language === 'ar' ? 'تمارين مخصصة اقترحها الذكاء الاصطناعي بناءً على حالتك النفسية الحالية.' : 'Personalized exercises recommended by the AI based on your current emotional state.',
+                  descriptionAr: 'تمارين مخصصة اقترحها الذكاء الاصطناعي بناءً على حالتك النفسية الحالية.',
+                  exercises: activeSuggested
+                });
+              }
+
+              if (dynamicPhases.length === 0) {
+                return (
+                  <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircleSolidIcon size={48} color={colors.primary} />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', textAlign: 'center', marginTop: 16, marginBottom: 8 }}>
+                      {language === 'ar' ? 'خارطة الطريق فارغة حالياً' : 'Roadmap is Currently Empty'}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 18 }}>
+                      {language === 'ar'
+                        ? 'ابدأ التحدث مع رفيقك الذكاء الاصطناعي أو اكتب تدوينات يومية للحصول على تمارين مخصصة وبناء خارطة طريقك.'
+                        : 'Start talking with your AI companion or write journal entries to get personalized exercises and build your roadmap.'}
+                    </Text>
+                  </View>
+                );
+              }
+
+              return dynamicPhases.map((phase, phaseIdx) => (
+                <View key={phase.phaseId} style={{ marginBottom: 28 }}>
+                  {/* Phase header */}
+                  <View style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    marginBottom: 16
+                  }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: colors.primary, marginBottom: 4, textAlign: isRTL ? 'right' : 'left' }}>
+                      {language === 'ar' ? phase.titleAr : phase.title}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 16, textAlign: isRTL ? 'right' : 'left' }}>
+                      {language === 'ar' ? phase.descriptionAr : phase.description}
+                    </Text>
+                  </View>
+
+                  {/* Exercises list in this phase */}
+                  <View style={{ paddingLeft: 8 }}>
+                    {phase.exercises.map((ex, itemIdx) => {
+                      const isCompleted = phase.phaseId === 'completed_milestones';
+                      const isActive = phase.phaseId === 'active_recommendations' && itemIdx === 0;
+                      const isLocked = phase.phaseId === 'active_recommendations' && itemIdx > 0;
+
+                      const name = ex.name || 'AI Suggested Exercise';
+                      const duration = ex.durationMinutes || 5;
+                      const type = ex.exerciseType || 'General';
+
+                      return (
+                        <View key={`${ex.id}-${itemIdx}`} style={[{ flexDirection: 'row', minHeight: 80 }, isRTL && { flexDirection: 'row-reverse' }]}>
+                          {/* Timeline Left Line Column */}
+                          <View style={[{ alignItems: 'center' }, isRTL ? { marginLeft: 16 } : { marginRight: 16 }]}>
+                            <View style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: 12,
+                              backgroundColor: isCompleted ? '#10B981' : (isActive ? '#3B82F6' : '#E2E8F0'),
+                              borderWidth: isActive ? 4 : 0,
+                              borderColor: isActive ? '#DBEAFE' : 'transparent',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              zIndex: 2
+                            }}>
+                              {isCompleted ? (
+                                <CheckCircleSolidIcon size={14} color="#FFFFFF" />
+                              ) : (
+                                isLocked ? (
+                                  <LockIcon size={10} color="#94A3B8" />
+                                ) : (
+                                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' }} />
+                                )
+                              )}
+                            </View>
+                            {/* Line connecting nodes */}
+                            {!(phaseIdx === dynamicPhases.length - 1 && itemIdx === phase.exercises.length - 1) && (
+                              <View style={{
+                                width: 2,
+                                flex: 1,
+                                backgroundColor: isCompleted ? '#10B981' : '#E2E8F0',
+                                marginVertical: 4
+                              }} />
+                            )}
+                          </View>
+
+                          {/* Exercise Card Body */}
+                          <View style={{ flex: 1, paddingBottom: 16 }}>
+                            <TouchableOpacity
+                              activeOpacity={isLocked ? 1 : 0.7}
+                              onPress={() => {
+                                if (!isLocked) {
+                                  setShowRoadmapModal(false);
+                                  setSuggestedExercise(ex);
+                                  setIsAiSession(true);
+                                  setShowHistoryOnly(false);
+                                  setSessionFinished(false);
+                                  setCountdown(null);
+                                }
+                              }}
+                              style={[{
+                                backgroundColor: '#FFFFFF',
+                                borderRadius: 14,
+                                padding: 14,
+                                borderWidth: 1,
+                                borderColor: isActive ? '#3B82F6' : '#E2E8F0',
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.02,
+                                shadowRadius: 4,
+                                elevation: 1,
+                                opacity: isLocked ? 0.6 : 1
+                              }, isRTL && { flexDirection: 'row-reverse' }]}
+                            >
+                              <View style={[{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                backgroundColor: isCompleted ? '#E6F4EA' : (isActive ? '#EBF5FF' : '#F1F5F9'),
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                              }, isRTL ? { marginLeft: 12 } : { marginRight: 12 }]}>
+                                {getExerciseIcon(type, isCompleted ? '#10B981' : (isActive ? '#3B82F6' : '#94A3B8'))}
+                              </View>
+
+                              <View style={[{ flex: 1 }, isRTL && { alignItems: 'flex-end' }]}>
+                                <Text style={{
+                                  fontSize: 14,
+                                  fontWeight: '700',
+                                  color: '#1E293B',
+                                  textDecorationLine: isCompleted ? 'line-through' : 'none'
+                                }} numberOfLines={1}>
+                                  {name}
+                                </Text>
+                                <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                                  {duration}m . {type}
+                                </Text>
+                              </View>
+
+                              {/* Status Tag */}
+                              {isCompleted ? (
+                                <View style={[{ backgroundColor: '#E6F4EA', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
+                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#137333' }}>
+                                    {language === 'ar' ? 'مكتمل' : 'Done'}
+                                  </Text>
+                                </View>
+                              ) : (
+                                isActive ? (
+                                  <View style={[{ backgroundColor: '#EBF5FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1E40AF' }}>
+                                      {language === 'ar' ? 'ابدأ الآن' : 'Start'}
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <View style={[{ backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>
+                                      {language === 'ar' ? 'مغلق' : 'Locked'}
+                                    </Text>
+                                  </View>
+                                )
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              ));
+            })()}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

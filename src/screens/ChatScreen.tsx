@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, AppState, StatusBar,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, AppState, StatusBar, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -11,8 +11,17 @@ import { colors } from '../theme';
 import s from './ChatScreen.style';
 import { ChatService } from '../services/chatService';
 import { useAuth } from '../context/AuthContext';
+import { 
+  Activity, 
+  BookOpen, 
+  AlertTriangle, 
+  Phone, 
+  MessageSquare, 
+  Wind, 
+  Globe, 
+  ShieldAlert 
+} from 'lucide-react-native';
 
-// How long (ms) the user must be away from the chat before the session is auto-ended
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 interface Message {
@@ -28,7 +37,6 @@ export function ChatScreen(): React.ReactElement {
   const firstName = userName ? userName.split(' ')[0] : 'there';
   const navigation = useNavigation<any>();
 
-  // ── state ──────────────────────────────────────────────────────────────────
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -42,7 +50,6 @@ export function ChatScreen(): React.ReactElement {
   const [isEnded, setIsEnded] = useState(false);
   const [isCrisis, setIsCrisis] = useState(false);
 
-  // ── refs for background / timeout ─────────────────────────────────────────
   const chatIdRef = useRef<string | null>(null);
   const isEndedRef = useRef(false);
   const isCrisisRef = useRef(false);
@@ -51,12 +58,10 @@ export function ChatScreen(): React.ReactElement {
   const blurTimeRef = useRef<number | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
-  // Keep refs in sync with state
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   useEffect(() => { isEndedRef.current = isEnded; }, [isEnded]);
   useEffect(() => { isCrisisRef.current = isCrisis; }, [isCrisis]);
 
-  // Keep active chatId in storage in sync
   useEffect(() => {
     const updateActiveChatId = async () => {
       try {
@@ -73,12 +78,10 @@ export function ChatScreen(): React.ReactElement {
     updateActiveChatId();
   }, [chatId, isEnded]);
 
-  // ── Load existing open chat on mount ──────────────────────────────────────
   useEffect(() => {
     const initChat = async () => {
       setIsThinking(true);
       try {
-        // Fetch up to 3 recent chat sessions to build a continuous thread of conversation history
         const recentChats = await ChatService.getRecentChats(3);
         
         let allMappedMessages: Message[] = [];
@@ -92,7 +95,6 @@ export function ChatScreen(): React.ReactElement {
           lastChatEnded = latestChat.isEnded;
           lastChatCrisis = latestChat.riskLevel === 'crisis';
 
-          // Only load history if the current session is NOT ended!
           if (!lastChatEnded) {
             const detailsPromises = recentChats.map((c: any) => ChatService.getChatDetails(c.id));
             const detailsList = await Promise.all(detailsPromises);
@@ -115,7 +117,6 @@ export function ChatScreen(): React.ReactElement {
         if (allMappedMessages.length > 0 && !lastChatEnded) {
           setMessages(allMappedMessages);
         } else {
-          // Ended session or new user -> start with empty/fresh welcome
           setMessages([
             {
               id: 'welcome_' + Date.now(),
@@ -130,7 +131,6 @@ export function ChatScreen(): React.ReactElement {
           setIsEnded(false);
           setIsCrisis(lastChatCrisis);
         } else {
-          // Start a new chat session on the server
           const newId = await ChatService.startChat();
           if (newId) setChatId(newId);
           setIsEnded(false);
@@ -145,34 +145,29 @@ export function ChatScreen(): React.ReactElement {
     initChat();
   }, [firstName]);
 
-  // ── Auto-scroll on new messages ───────────────────────────────────────────
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages]);
 
-  // ── Background / foreground detection (5-min timeout) ────────────────────
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextState) => {
       if (
         appStateRef.current.match(/active/) &&
         nextState.match(/background|inactive/)
       ) {
-        // App went to background — save current time
         if (!isEndedRef.current && chatIdRef.current) {
           backgroundTimeRef.current = Date.now();
           const exitTimeKey = await ChatService.getUserKey('@chat_exit_time');
           await AsyncStorage.setItem(exitTimeKey, Date.now().toString());
         }
       } else if (nextState === 'active') {
-        // App came back to foreground — calculate elapsed time
         if (backgroundTimeRef.current && !isEndedRef.current && chatIdRef.current) {
           const elapsed = Date.now() - backgroundTimeRef.current;
           if (elapsed >= SESSION_TIMEOUT_MS) {
             finalizeChat(chatIdRef.current!);
           } else {
-            // Clear exit time only if ChatScreen is currently focused
             if (blurTimeRef.current === null) {
               const exitTimeKey = await ChatService.getUserKey('@chat_exit_time');
               await AsyncStorage.removeItem(exitTimeKey);
@@ -189,23 +184,19 @@ export function ChatScreen(): React.ReactElement {
     };
   }, []);
 
-  // ── Tab blur → start 5-min timer (user navigated away inside app) ─────────
   useFocusEffect(
     useCallback(() => {
-      // Screen gained focus — clear exit time from storage
       ChatService.getUserKey('@chat_exit_time').then(key => {
         AsyncStorage.removeItem(key).catch(console.error);
       });
       blurTimeRef.current = null;
 
-      // Cancel any active background timer
       if (backgroundTimerRef.current) {
         clearTimeout(backgroundTimerRef.current);
         backgroundTimerRef.current = null;
       }
 
       return () => {
-        // Screen lost focus (user switched tab)
         if (!isEndedRef.current && chatIdRef.current) {
           const now = Date.now();
           blurTimeRef.current = now;
@@ -213,10 +204,9 @@ export function ChatScreen(): React.ReactElement {
             AsyncStorage.setItem(key, now.toString()).catch(console.error);
           });
           
-          // Also set a backup setTimeout in case they stay in foreground
           if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
           backgroundTimerRef.current = setTimeout(() => {
-            if (blurTimeRef.current) { // still blurred
+            if (blurTimeRef.current) {
               finalizeChat(chatIdRef.current!);
             }
           }, SESSION_TIMEOUT_MS);
@@ -225,11 +215,18 @@ export function ChatScreen(): React.ReactElement {
     }, [chatId, isEnded])
   );
 
-  // ── Send a message ────────────────────────────────────────────────────────
   const handleSend = async () => {
     if (!inputText.trim() || isThinking || isCrisis) return;
 
     const userMessageText = inputText.trim();
+    
+    const lowerText = userMessageText.toLowerCase();
+    const riskPhrases = [
+      'suicide', 'kill myself', 'want to die', 'end my life', 'harm myself', 
+      'killmy self', 'end mylife', 'suicidal', 'better off dead'
+    ];
+    const containsRisk = riskPhrases.some(phrase => lowerText.includes(phrase));
+
     const userMsg: Message = {
       id: Date.now().toString(),
       text: userMessageText,
@@ -238,12 +235,21 @@ export function ChatScreen(): React.ReactElement {
 
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
+
+    if (containsRisk) {
+      setIsThinking(true);
+      setTimeout(() => {
+        setIsThinking(false);
+        handleCrisis(chatId || 'client_detected');
+      }, 800);
+      return;
+    }
+
     setIsThinking(true);
 
     try {
       let currentChatId = chatId;
       
-      // If the session was previously ended normally (e.g. timeout), start a brand NEW chat session on send!
       if (isEnded || !currentChatId) {
         currentChatId = await ChatService.startChat();
         if (currentChatId) {
@@ -260,17 +266,13 @@ export function ChatScreen(): React.ReactElement {
       const response = await ChatService.sendMessage(currentChatId, userMessageText);
 
       if (response) {
-        // The AI reply comes in the "message" field
         addMessage('ai', response.message || response.reply || response.content || 'I understand. Tell me more.');
 
-        // React based on riskLevel returned by the API
-        // API returns: 'normal' | 'elevated' | 'crisis' — no suggestedAction field
         const riskLevel: string = (response.riskLevel || response.risk_level || 'normal').toLowerCase().trim();
 
         if (riskLevel === 'crisis' || riskLevel === 'danger') {
           handleCrisis(currentChatId);
         } else if (riskLevel === 'elevated' || riskLevel === 'high' || riskLevel === 'warning') {
-          // Elevated/high/warning: fetch exercises in background, then show yellow bubble
           ChatService.summarizeChat(currentChatId)
             .then((summaryData) => {
               const exercises = summaryData?._exercises || [];
@@ -278,7 +280,6 @@ export function ChatScreen(): React.ReactElement {
             })
             .catch(() => showWarningBubble('exercise'));
         }
-        // 'normal' → just continue the conversation, no bubbles
       } else {
         addMessage('ai', 'I\'m having a little trouble connecting right now, but I\'m still here for you. Please try again.');
       }
@@ -289,9 +290,8 @@ export function ChatScreen(): React.ReactElement {
     }
   };
 
-  // ── End the session (called automatically) ────────────────────────────────
   const finalizeChat = async (id: string) => {
-    if (isEndedRef.current) return; // Guard against double calls
+    if (isEndedRef.current) return;
     isEndedRef.current = true;
     setIsEnded(true);
 
@@ -299,7 +299,6 @@ export function ChatScreen(): React.ReactElement {
       const result = await ChatService.endChat(id);
       const exercises = result?._exercises || [];
 
-      // Clear the previous messages immediately so they are no longer visible!
       setMessages([
         {
           id: 'welcome_' + Date.now(),
@@ -308,12 +307,10 @@ export function ChatScreen(): React.ReactElement {
         }
       ]);
 
-      // Always save the flag and specify if we got exercises or not
       const flagValue = exercises.length > 0 ? 'exercises' : 'none';
       const alertKey = await ChatService.getUserKey('@session_complete_alert');
       await AsyncStorage.setItem(alertKey, flagValue);
 
-      // Helper to start a fresh new session
       const startFreshSession = async () => {
         setIsThinking(true);
         try {
@@ -332,13 +329,11 @@ export function ChatScreen(): React.ReactElement {
         }
       };
 
-      // Start the fresh session in the background
       await startFreshSession();
 
-      // Show the complete alert
       if (exercises.length > 0) {
         Alert.alert(
-          'Session Complete 🌿',
+          'Session Complete',
           'Mentora has suggested some exercises based on our conversation.',
           [
             { 
@@ -355,7 +350,7 @@ export function ChatScreen(): React.ReactElement {
         );
       } else {
         Alert.alert(
-          'Session Ended 🌿',
+          'Session Ended',
           'Your conversation session has been completed and summarized.',
           [{ text: 'OK' }]
         );
@@ -369,7 +364,6 @@ export function ChatScreen(): React.ReactElement {
     }
   };
 
-  // ── Crisis handling ───────────────────────────────────────────────────────
   const handleCrisis = async (id: string) => {
     setIsCrisis(true);
     isCrisisRef.current = true;
@@ -382,11 +376,9 @@ export function ChatScreen(): React.ReactElement {
       'Your Safety Matters',
       'The chat has been stopped for your safety. Please reach out for professional help immediately.',
     );
-    // Still call endChat so the backend records the session as ended
     try { await ChatService.endChat(id); } catch (_) {}
   };
 
-  // ── Yellow warning bubble ─────────────────────────────────────────────────
   const showWarningBubble = (action: 'exercise' | 'journal') => {
     const text = action === 'exercise'
       ? "Based on our conversation, I think a short exercise might help you feel more grounded right now."
@@ -400,19 +392,20 @@ export function ChatScreen(): React.ReactElement {
     setMessages(prev => [...prev, msg]);
   };
 
-  // ── Helper to add a message ───────────────────────────────────────────────
   const addMessage = (sender: Message['sender'], text: string) => {
     setMessages(prev => [...prev, { id: sender + '_' + Date.now(), text, sender }]);
   };
 
-  // ── Render a single message bubble ────────────────────────────────────────
   const renderMessage = ({ item }: { item: Message }) => {
     if (item.sender === 'system_warning') {
       return (
         <View style={[s.warningBubble, { padding: 18, borderLeftWidth: 4, borderLeftColor: '#F59E0B' }]}>
-          <Text style={[s.warningText, { textAlign: 'left', fontSize: 14, marginBottom: 12, lineHeight: 20 }]}>
-            ⚠️ {item.text}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <AlertTriangle size={16} color="#F59E0B" style={{ marginRight: 6 }} />
+            <Text style={[s.warningText, { textAlign: 'left', fontSize: 14, lineHeight: 20, flex: 1 }]}>
+              {item.text}
+            </Text>
+          </View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
             <TouchableOpacity
               style={{
@@ -424,7 +417,8 @@ export function ChatScreen(): React.ReactElement {
               }}
               onPress={() => navigation.navigate('Exercises', { openSuggested: true })}
             >
-              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>🧘‍♂️ Start Exercise</Text>
+              <Activity size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>Start Exercise</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={{
@@ -435,7 +429,8 @@ export function ChatScreen(): React.ReactElement {
               }}
               onPress={() => navigation.navigate('Journal')}
             >
-              <Text style={{ color: '#F59E0B', fontWeight: 'bold', fontSize: 13 }}>📝 Write Journal</Text>
+              <BookOpen size={14} color="#F59E0B" style={{ marginRight: 4 }} />
+              <Text style={{ color: '#F59E0B', fontWeight: 'bold', fontSize: 13 }}>Write Journal</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -445,7 +440,10 @@ export function ChatScreen(): React.ReactElement {
     if (item.sender === 'system_crisis') {
       return (
         <View style={s.crisisBubble}>
-          <Text style={s.crisisText}>🚨 {item.text}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <ShieldAlert size={18} color="#DC2626" style={{ marginRight: 8 }} />
+            <Text style={[s.crisisText, { flex: 1 }]}>{item.text}</Text>
+          </View>
         </View>
       );
     }
@@ -460,7 +458,6 @@ export function ChatScreen(): React.ReactElement {
     );
   };
 
-  // ── UI ────────────────────────────────────────────────────────────────────
   return (
     <View style={s.container}>
       <View style={[s.header, { paddingTop: insets.top || 44 }]}>
@@ -530,10 +527,128 @@ export function ChatScreen(): React.ReactElement {
         )}
 
         {isCrisis && (
-          <View style={[s.inputArea, { paddingBottom: Math.max(insets.bottom, 16), justifyContent: 'center' }]}>
-            <Text style={{ color: 'red', fontStyle: 'italic', textAlign: 'center', fontWeight: 'bold' }}>
-              This session has ended due to safety concerns. Please seek professional help.
+          <View style={{
+            backgroundColor: '#FFF5F5',
+            borderTopWidth: 2,
+            borderTopColor: '#FEE2E2',
+            paddingTop: 20,
+            paddingHorizontal: 24,
+            paddingBottom: Math.max(insets.bottom, 20),
+            alignItems: 'center',
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -3 },
+            shadowOpacity: 0.08,
+            shadowRadius: 10,
+            elevation: 10,
+          }}>
+            <Text style={{
+              fontSize: 18,
+              color: '#DC2626',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              marginBottom: 6
+            }}>
+              You're Not Alone
             </Text>
+            <Text style={{
+              fontSize: 13,
+              color: '#7F1D1D',
+              textAlign: 'center',
+              marginBottom: 18,
+              lineHeight: 18
+            }}>
+              Your safety is our top priority. If you or someone you know is struggling or in crisis, help is available. Please reach out to these free, confidential resources:
+            </Text>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#DC2626',
+                  paddingVertical: 14,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                  shadowColor: '#DC2626',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 4,
+                  elevation: 3
+                }}
+                onPress={() => Linking.openURL('tel:988').catch(() => Alert.alert('Error', 'Could not dial 988. Please call directly.'))}
+              >
+                <Phone size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>
+                  Call Suicide & Crisis Lifeline (988)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#1E293B',
+                  paddingVertical: 14,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 4,
+                  elevation: 3
+                }}
+                onPress={() => Linking.openURL('sms:741741?body=HOME').catch(() => Alert.alert('Error', 'Could not open messages. Please text HOME to 741741.'))}
+              >
+                <MessageSquare size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 }}>
+                  Text Crisis Support (HOME to 741741)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 1.5,
+                  borderColor: '#059669',
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8
+                }}
+                onPress={() => navigation.navigate('BreathingExercise')}
+              >
+                <Wind size={14} color="#059669" style={{ marginRight: 6 }} />
+                <Text style={{ color: '#059669', fontWeight: 'bold', fontSize: 14 }}>
+                  Take a Guided Calming Breath
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 1,
+                  borderColor: '#D1D5DB',
+                  paddingVertical: 12,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  gap: 8
+                }}
+                onPress={() => Linking.openURL('https://findahelpline.com/').catch(() => Alert.alert('Error', 'Could not open help portal.'))}
+              >
+                <Globe size={14} color="#4B5563" style={{ marginRight: 6 }} />
+                <Text style={{ color: '#4B5563', fontWeight: '500', fontSize: 13 }}>
+                  International Helplines & Resources
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </KeyboardAvoidingView>

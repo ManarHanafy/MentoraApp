@@ -26,7 +26,10 @@ import {
   NotificationSettingsScreen,
   ChangePasswordScreen,
   DeleteAccountScreen,
+  BreathingExerciseScreen,
+  FirstLaunchOnboardingScreen,
 } from '../screens';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HomeIcon, ChatIcon, JournalIcon, InsightsIcon, ProfileIcon } from '../components/Icons';
 import { SwipeContainer } from '../components';
 
@@ -131,14 +134,32 @@ function AuthStack(): React.ReactElement {
 
 export function AppNavigator(): React.ReactElement {
   const { isLoading, isLoggedIn, hasCompletedOnboarding } = useAuth();
+  const [firstLaunchChecked, setFirstLaunchChecked] = React.useState(false);
+  const [hasCompletedFirstLaunch, setHasCompletedFirstLaunch] = React.useState(false);
+
+  React.useEffect(() => {
+    AsyncStorage.getItem('@mentora_first_launch_done').then((val) => {
+      if (val === 'true') {
+        setHasCompletedFirstLaunch(true);
+      }
+      setFirstLaunchChecked(true);
+    });
+  }, []);
+
+  const handleFirstLaunchComplete = React.useCallback(async () => {
+    await AsyncStorage.setItem('@mentora_first_launch_done', 'true');
+    setHasCompletedFirstLaunch(true);
+  }, []);
 
   let content: React.ReactNode;
-  if (isLoading) {
+  if (isLoading || !firstLaunchChecked) {
     content = (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
         <Text style={[typography.body, { color: colors.textMuted }]}>Loading...</Text>
       </View>
     );
+  } else if (!hasCompletedFirstLaunch) {
+    content = <FirstLaunchOnboardingScreen onComplete={handleFirstLaunchComplete} />;
   } else if (!isLoggedIn) {
     content = <AuthStack />;
   } else if (!hasCompletedOnboarding) {
@@ -148,6 +169,7 @@ export function AppNavigator(): React.ReactElement {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="Exercises" component={ExercisesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="BreathingExercise" component={BreathingExerciseScreen} options={{ headerShown: false }} />
         <Stack.Screen name="MoodCheckIn" component={MoodCheckInScreen} options={{ title: 'Mood check-in' }} />
       </Stack.Navigator>
     );

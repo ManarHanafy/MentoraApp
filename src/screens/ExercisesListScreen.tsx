@@ -4,26 +4,51 @@ import { useNavigation } from '@react-navigation/native';
 import { colors, typography } from '../theme';
 import { ArrowLeftIcon, StarIcon } from '../components/Icons';
 import { Exercise, ExerciseService } from '../services/exerciseService';
+import { 
+  Search, 
+  Clock, 
+  Heart, 
+  Play, 
+  CheckCircle, 
+  RotateCcw, 
+  Brain, 
+  Wind, 
+  Moon, 
+  Target, 
+  Waves, 
+  Users, 
+  Shield, 
+  Activity, 
+  Leaf 
+} from 'lucide-react-native';
 
-// Icons
-const SearchIcon = () => <Text style={{ color: '#A0AEC0', fontSize: 16 }}>🔍</Text>;
-const ClockIcon = () => <Text style={{ color: '#A0AEC0', fontSize: 12 }}>⏱</Text>;
-const HeartOutline = () => <Text style={{ color: '#FFFFFF', fontSize: 24 }}>♡</Text>;
-const PlayIcon = ({ color = '#161B22' }) => <Text style={{ fontSize: 16, color }}>▶</Text>;
+// Dynamic Category Icon helper
+const CategoryIcon = ({ type, size = 20, color = colors.primary }: { type: string; size?: number; color?: string }) => {
+  switch (type) {
+    case 'CBT': return <Brain size={size} color={color} />;
+    case 'Breathing': return <Wind size={size} color={color} />;
+    case 'Sleep': return <Moon size={size} color={color} />;
+    case 'Behavioral': return <Target size={size} color={color} />;
+    case 'Relaxation': return <Waves size={size} color={color} />;
+    case 'Social': return <Users size={size} color={color} />;
+    case 'Safety': return <Shield size={size} color={color} />;
+    case 'Mindfulness': return <Activity size={size} color={color} />;
+    default: return <Leaf size={size} color={color} />;
+  }
+};
 
-// التصنيفات الحقيقية من قاعدة بياناتك
 const CATEGORIES = ['All', 'CBT', 'Breathing', 'Sleep', 'Behavioral', 'Relaxation', 'Social', 'Safety', 'Mindfulness'];
 
 const TIPS = {
-  All: { title: '🌿 Wellness Journey', points: ['Stay consistent', 'Take deep breaths', 'Be kind to yourself'] },
-  CBT: { title: '🧠 Cognitive Balance', points: ['Observe your thoughts', 'Challenge negative beliefs', 'Keep a thought record'] },
-  Breathing: { title: '💨 Breathing Power', points: ['Calm your nervous system', 'Improve focus', 'Lower stress instantly'] },
-  Sleep: { title: '😴 Better Sleep', points: ['Keep a steady schedule', 'No screens before bed', 'Peaceful environment'] },
-  Behavioral: { title: '🎯 Behavioral Activation', points: ['Start with small steps', 'Track your activities', 'Celebrate small wins'] },
-  Relaxation: { title: '🌊 Find Your Calm', points: ['Release muscle tension', 'Quiet your mind', 'Enjoy the peace'] },
-  Social: { title: '🤝 Connection', points: ['Reach out to someone', 'Share your thoughts', 'Build social bonds'] },
-  Safety: { title: '🛡️ Safety First', points: ['Create a safe space', 'Identify support contacts', 'Follow your plan'] },
-  Mindfulness: { title: '🧘 Current Moment', points: ['Focus on now', 'Non-judgmental awareness', 'Gentle observation'] }
+  All: { title: 'Wellness Journey', points: ['Stay consistent', 'Take deep breaths', 'Be kind to yourself'] },
+  CBT: { title: 'Cognitive Balance', points: ['Observe your thoughts', 'Challenge negative beliefs', 'Keep a thought record'] },
+  Breathing: { title: 'Breathing Power', points: ['Calm your nervous system', 'Improve focus', 'Lower stress instantly'] },
+  Sleep: { title: 'Better Sleep', points: ['Keep a steady schedule', 'No screens before bed', 'Peaceful environment'] },
+  Behavioral: { title: 'Behavioral Activation', points: ['Start with small steps', 'Track your activities', 'Celebrate small wins'] },
+  Relaxation: { title: 'Find Your Calm', points: ['Release muscle tension', 'Quiet your mind', 'Enjoy the peace'] },
+  Social: { title: 'Connection', points: ['Reach out to someone', 'Share your thoughts', 'Build social bonds'] },
+  Safety: { title: 'Safety First', points: ['Create a safe space', 'Identify support contacts', 'Follow your plan'] },
+  Mindfulness: { title: 'Current Moment', points: ['Focus on now', 'Non-judgmental awareness', 'Gentle observation'] }
 };
 
 export function ExercisesListScreen(): React.ReactElement {
@@ -48,7 +73,7 @@ export function ExercisesListScreen(): React.ReactElement {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     } else if (countdown === 0) {
       setCountdown(null);
-      setSessionFinished(true); // انتهى المؤقت
+      setSessionFinished(true);
     }
     return () => clearTimeout(timer);
   }, [countdown]);
@@ -64,7 +89,6 @@ export function ExercisesListScreen(): React.ReactElement {
       setExercises(all);
       setHistory(completed);
 
-      // الفلتر الذكي: اعرض التمرين المقترح فقط إذا لم يكتمل بعد
       const uncompletedSuggested = suggested.filter(s => !completed.some(c => c.id === s.id));
 
       if (uncompletedSuggested.length > 0 && !showHistoryOnly) {
@@ -110,7 +134,7 @@ export function ExercisesListScreen(): React.ReactElement {
 
   const tipData = TIPS[activeTab as keyof typeof TIPS] || TIPS.All;
 
-  // VIEW 1: TASK DETAIL (التمرين المقترح)
+  // VIEW 1: TASK DETAIL
   if (suggestedExercise && !showHistoryOnly) {
     const ex = suggestedExercise;
     const hasTimer = ex.durationMinutes > 0;
@@ -123,7 +147,11 @@ export function ExercisesListScreen(): React.ReactElement {
               <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
                  <ArrowLeftIcon size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <View style={s.headerActions}><TouchableOpacity><HeartOutline /></TouchableOpacity></View>
+              <View style={s.headerActions}>
+                <TouchableOpacity>
+                  <Heart size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={s.headerContent}>
                <Text style={s.headerTitle}>{ex.name}</Text>
@@ -135,7 +163,7 @@ export function ExercisesListScreen(): React.ReactElement {
         <ScrollView style={s.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={s.floatingCard}>
              <View style={s.cardTopRow}>
-                <Text style={{ fontSize: 32 }}>🧘‍♂️</Text>
+                <CategoryIcon type={ex.exerciseType} size={36} color="#FFFFFF" />
                 <View style={s.cardStats}>
                    <View style={s.statCol}>
                       <Text style={s.statLabel}>Duration</Text>
@@ -150,30 +178,29 @@ export function ExercisesListScreen(): React.ReactElement {
                 </View>
              </View>
              
-             {/* منطق الأزرار بناءً على التايمر */}
              {sessionFinished ? (
                <View style={s.actionRow}>
                   <TouchableOpacity style={[s.startNowBtn, { flex: 1, backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                    <Text style={[s.startNowText, { color: colors.white }]}>Done ✨</Text>
+                     <Text style={[s.startNowText, { color: colors.white }]}>Done</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.startNowBtn, { flex: 1, marginLeft: 10, backgroundColor: colors.white }]} onPress={onRepeat}>
-                    <Text style={s.startNowText}>Repeat 🔄</Text>
+                     <Text style={s.startNowText}>Repeat</Text>
                   </TouchableOpacity>
                </View>
              ) : countdown !== null && countdown > 0 ? (
-                 <View style={[s.startNowBtn, { backgroundColor: '#1E293B', borderWidth: 0 }]}>
-                    <Text style={[s.startNowText, { color: '#FFF' }]}>
-                       {Math.floor(countdown / 60).toString().padStart(2, '0')}:{(countdown % 60).toString().padStart(2, '0')}
-                    </Text>
-                 </View>
+                  <View style={[s.startNowBtn, { backgroundColor: '#1E293B', borderWidth: 0 }]}>
+                     <Text style={[s.startNowText, { color: '#FFF' }]}>
+                        {Math.floor(countdown / 60).toString().padStart(2, '0')}:{(countdown % 60).toString().padStart(2, '0')}
+                     </Text>
+                  </View>
              ) : hasTimer ? (
-                <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
-                   <PlayIcon /><Text style={s.startNowText}>Start Now</Text>
-                </TouchableOpacity>
+                 <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
+                    <Play size={16} color="#161B22" /><Text style={s.startNowText}>Start Now</Text>
+                 </TouchableOpacity>
              ) : (
-                <TouchableOpacity style={[s.startNowBtn, { backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                   <Text style={[s.startNowText, { color: colors.white }]}>Done ✅</Text>
-                </TouchableOpacity>
+                 <TouchableOpacity style={[s.startNowBtn, { backgroundColor: colors.success }]} onPress={onExerciseDone}>
+                    <Text style={[s.startNowText, { color: colors.white }]}>Done</Text>
+                 </TouchableOpacity>
              )}
           </View>
 
@@ -197,7 +224,7 @@ export function ExercisesListScreen(): React.ReactElement {
           }) : <Text style={s.overviewText}>Follow the instructions provided by your AI guide.</Text>}
           
           <TouchableOpacity style={s.seeAllBtn} onPress={() => setShowHistoryOnly(true)}>
-            <Text style={s.seeAllText}>Skipp to All Exercises</Text>
+            <Text style={s.seeAllText}>Skip to All Exercises</Text>
           </TouchableOpacity>
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -213,12 +240,17 @@ export function ExercisesListScreen(): React.ReactElement {
     );
   }
 
-  // VIEW 2: FULL LIST (قائمة التمارين كاملة بعد الانتهاء منها)
+  // VIEW 2: FULL LIST
   return (
     <SafeAreaView style={s.safeArea}>
       <View style={s.listHeaderRow}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}><ArrowLeftIcon size={24} color={colors.textPrimary} /></TouchableOpacity>
-        <View style={s.searchContainer}><SearchIcon /><TextInput style={s.searchInput} placeholder="Search exercises..." value={search} onChangeText={setSearch}/></View>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <ArrowLeftIcon size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <View style={s.searchContainer}>
+          <Search size={18} color="#A0AEC0" style={{ marginRight: 8 }} />
+          <TextInput style={s.searchInput} placeholder="Search exercises..." value={search} onChangeText={setSearch}/>
+        </View>
       </View>
       
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsScroll}>
@@ -232,7 +264,10 @@ export function ExercisesListScreen(): React.ReactElement {
       </ScrollView>
 
       <View style={s.tipsCard}>
-        <Text style={s.tipsTitle}>{tipData.title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <CategoryIcon type={activeTab} size={20} color="#FCD34D" />
+          <Text style={[s.tipsTitle, { marginBottom: 0, marginLeft: 8 }]}>{tipData.title}</Text>
+        </View>
         {tipData.points.map((pt, idx) => <Text key={idx} style={s.tipsPoint}>• {pt}</Text>)}
       </View>
 
@@ -241,9 +276,16 @@ export function ExercisesListScreen(): React.ReactElement {
           filteredExercises.length === 0 ? <Text style={s.emptyHint}>No exercises found on server.</Text> :
           filteredExercises.map((ex, idx) => (
             <TouchableOpacity key={`${ex.id}-${idx}`} style={s.exerciseCard} onPress={() => { setSuggestedExercise(ex); setShowHistoryOnly(false); setSessionFinished(false); }}>
-              <View style={s.cardLeft}><View style={s.iconBox}><Text style={{fontSize: 24}}>🧘‍♂️</Text></View>
-                <View style={s.cardBody}><Text style={s.cardTitle}>{ex.name}</Text><Text style={s.cardDesc} numberOfLines={1}>{ex.description}</Text>
-                  <View style={s.metaRow}><ClockIcon /><Text style={s.metaText}>{ex.durationMinutes}m</Text>
+              <View style={s.cardLeft}>
+                <View style={s.iconBox}>
+                  <CategoryIcon type={ex.exerciseType} size={22} color={colors.primary} />
+                </View>
+                <View style={s.cardBody}>
+                  <Text style={s.cardTitle}>{ex.name}</Text>
+                  <Text style={s.cardDesc} numberOfLines={1}>{ex.description}</Text>
+                  <View style={s.metaRow}>
+                    <Clock size={12} color="#A0AEC0" />
+                    <Text style={s.metaText}>{ex.durationMinutes}m</Text>
                     {history.some(h => h.id === ex.id) && <View style={s.doneTag}><Text style={s.doneTagText}>COMPLETED</Text></View>}
                     <View style={s.typeTag}><Text style={s.typeTagText}>{ex.exerciseType}</Text></View>
                   </View>

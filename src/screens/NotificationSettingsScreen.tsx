@@ -68,55 +68,57 @@ export function NotificationSettingsScreen(): React.ReactElement {
           </Text>
         </View>
 
-        <View style={[s.switchRow, isRTL && { flexDirection: 'row-reverse' }]}>
-          <View style={[s.rowTextWrap, isRTL ? { marginLeft: 16 } : { marginRight: 16 }, isRTL && { alignItems: 'flex-end' }]}>
-            <Text style={[s.rowLabel, { textAlign: textDir }]}>
-              {language === 'ar' ? 'التذكيرات اليومية' : 'Daily Reminders'}
-            </Text>
-            <Text style={[s.rowSub, { textAlign: textDir }]}>
-              {language === 'ar' ? 'تذكيري بتسجيل مزاجي وكتابة مذكراتي اليومية' : 'Remind me to log my mood and write journal entries'}
-            </Text>
+        <View style={s.settingsCard}>
+          <View style={[s.switchRow, isRTL && { flexDirection: 'row-reverse' }]}>
+            <View style={[s.rowTextWrap, isRTL ? { marginLeft: 16 } : { marginRight: 16 }, isRTL && { alignItems: 'flex-end' }]}>
+              <Text style={[s.rowLabel, { textAlign: textDir }]}>
+                {language === 'ar' ? 'التذكيرات اليومية' : 'Daily Reminders'}
+              </Text>
+              <Text style={[s.rowSub, { textAlign: textDir }]}>
+                {language === 'ar' ? 'تذكيري بتسجيل مزاجي وكتابة مذكراتي اليومية' : 'Remind me to log my mood and write journal entries'}
+              </Text>
+            </View>
+            <Switch
+              value={dailyReminder}
+              onValueChange={(v) => saveToggle('@mentora_daily_reminder', v, setDailyReminder)}
+              trackColor={{ false: '#E2E8F0', true: '#161B22' }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-          <Switch
-            value={dailyReminder}
-            onValueChange={(v) => saveToggle('@mentora_daily_reminder', v, setDailyReminder)}
-            trackColor={{ false: '#E2E8F0', true: '#161B22' }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
 
-        <View style={[s.switchRow, isRTL && { flexDirection: 'row-reverse' }]}>
-          <View style={[s.rowTextWrap, isRTL ? { marginLeft: 16 } : { marginRight: 16 }, isRTL && { alignItems: 'flex-end' }]}>
-            <Text style={[s.rowLabel, { textAlign: textDir }]}>
-              {language === 'ar' ? 'تنبيهات تمارين الذكاء الاصطناعي' : 'AI Exercise Alerts'}
-            </Text>
-            <Text style={[s.rowSub, { textAlign: textDir }]}>
-              {language === 'ar' ? 'إعلامي عندما يقترح ذكاء منتورا تمارين جديدة لي' : 'Notify me when Mentora AI has new suggested exercises'}
-            </Text>
+          <View style={[s.switchRow, isRTL && { flexDirection: 'row-reverse' }]}>
+            <View style={[s.rowTextWrap, isRTL ? { marginLeft: 16 } : { marginRight: 16 }, isRTL && { alignItems: 'flex-end' }]}>
+              <Text style={[s.rowLabel, { textAlign: textDir }]}>
+                {language === 'ar' ? 'تنبيهات تمارين الذكاء الاصطناعي' : 'AI Exercise Alerts'}
+              </Text>
+              <Text style={[s.rowSub, { textAlign: textDir }]}>
+                {language === 'ar' ? 'إعلامي عندما يقترح ذكاء منتورا تمارين جديدة لي' : 'Notify me when Mentora AI has new suggested exercises'}
+              </Text>
+            </View>
+            <Switch
+              value={aiRecs}
+              onValueChange={(v) => saveToggle('@mentora_ai_recs', v, setAiRecs)}
+              trackColor={{ false: '#E2E8F0', true: '#161B22' }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-          <Switch
-            value={aiRecs}
-            onValueChange={(v) => saveToggle('@mentora_ai_recs', v, setAiRecs)}
-            trackColor={{ false: '#E2E8F0', true: '#161B22' }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
 
-        <View style={[s.switchRow, isRTL && { flexDirection: 'row-reverse' }]}>
-          <View style={[s.rowTextWrap, isRTL ? { marginLeft: 16 } : { marginRight: 16 }, isRTL && { alignItems: 'flex-end' }]}>
-            <Text style={[s.rowLabel, { textAlign: textDir }]}>
-              {language === 'ar' ? 'تحديثات التطبيق' : 'Product Updates'}
-            </Text>
-            <Text style={[s.rowSub, { textAlign: textDir }]}>
-              {language === 'ar' ? 'إشعارات حول الميزات والتمارين العلاجية الجديدة' : 'Announcements about new therapeutic content and features'}
-            </Text>
+          <View style={[s.switchRow, { borderBottomWidth: 0 }, isRTL && { flexDirection: 'row-reverse' }]}>
+            <View style={[s.rowTextWrap, isRTL ? { marginLeft: 16 } : { marginRight: 16 }, isRTL && { alignItems: 'flex-end' }]}>
+              <Text style={[s.rowLabel, { textAlign: textDir }]}>
+                {language === 'ar' ? 'تحديثات التطبيق' : 'Product Updates'}
+              </Text>
+              <Text style={[s.rowSub, { textAlign: textDir }]}>
+                {language === 'ar' ? 'إشعارات حول الميزات والتمارين العلاجية الجديدة' : 'Announcements about new therapeutic content and features'}
+              </Text>
+            </View>
+            <Switch
+              value={appAnnounce}
+              onValueChange={(v) => saveToggle('@mentora_app_announce', v, setAppAnnounce)}
+              trackColor={{ false: '#E2E8F0', true: '#161B22' }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-          <Switch
-            value={appAnnounce}
-            onValueChange={(v) => saveToggle('@mentora_app_announce', v, setAppAnnounce)}
-            trackColor={{ false: '#E2E8F0', true: '#161B22' }}
-            thumbColor="#FFFFFF"
-          />
         </View>
       </ScrollView>
     </View>
@@ -185,11 +187,25 @@ const s = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  settingsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 30,
+  },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 18,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },

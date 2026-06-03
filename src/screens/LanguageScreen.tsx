@@ -6,10 +6,11 @@ import { colors } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
 import type { SupportedLanguage } from '../context/LanguageContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Globe } from 'lucide-react-native';
 
-const LANGUAGES: { code: SupportedLanguage; label: string; sublabel: string; flag: string }[] = [
-  { code: 'en', label: 'English', sublabel: 'English', flag: '🇬🇧' },
-  { code: 'ar', label: 'العربية', sublabel: 'Arabic', flag: '🇸🇦' },
+const LANGUAGES: { code: SupportedLanguage; label: string; sublabel: string }[] = [
+  { code: 'en', label: 'English', sublabel: 'English' },
+  { code: 'ar', label: 'العربية', sublabel: 'Arabic' },
 ];
 
 export function LanguageScreen(): React.ReactElement {
@@ -43,7 +44,7 @@ export function LanguageScreen(): React.ReactElement {
               onPress={() => choose(lang.code)}
               activeOpacity={0.8}
             >
-              <Text style={s.flag}>{lang.flag}</Text>
+              <Globe size={24} color={isActive ? '#161B22' : '#94A3B8'} style={{ marginRight: 16 }} />
               <View style={s.labelWrap}>
                 <Text style={[s.label, isActive && s.labelActive]}>{lang.label}</Text>
                 <Text style={s.sublabel}>{lang.sublabel}</Text>
@@ -114,10 +115,6 @@ const s = StyleSheet.create({
   rowActive: {
     borderColor: '#161B22',
     backgroundColor: '#F1F5F9',
-  },
-  flag: {
-    fontSize: 30,
-    marginRight: 16,
   },
   labelWrap: {
     flex: 1,

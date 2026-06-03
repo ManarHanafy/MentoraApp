@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { colors } from '../theme';
 import { OnboardingService, OnboardingQuestion } from '../services/onboardingService';
 
 export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): React.ReactElement {
@@ -13,6 +15,62 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Onboarding Tour / Tutorial state
+  const [showTutorial, setShowTutorial] = useState(true);
+  const [tutorialStep, setTutorialStep] = useState(0);
+
+   const TUTORIAL_SLIDES = [
+    {
+      title: language === 'ar' ? 'مرحباً بك في منتورا' : 'Welcome to Mentora',
+      description: language === 'ar' 
+        ? 'شريكك العلاجي المدعوم بالذكاء الاصطناعي، متواجد دائماً للاستماع إليك ومساعدتك على فهم وتفريغ مشاعرك في مساحة آمنة وسرية تماماً.'
+        : 'Your AI therapeutic partner, always here to listen, support, and help you process your emotions in a safe, confidential space.',
+      icon: (color: string) => (
+        <Svg width={100} height={100} viewBox="0 0 24 24" fill="none">
+          <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={1.5} />
+          <Path d="M12 8v8M8 12h8" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+        </Svg>
+      )
+    },
+    {
+      title: language === 'ar' ? 'خارطة طريق مخصصة' : 'Personalized Roadmaps',
+      description: language === 'ar'
+        ? 'احصل على تمارين أسبوعية مخصصة ومصممة خصيصاً لأهدافك واحتياجاتك النفسية والصحية لبناء روتين علاجي متكامل.'
+        : 'Receive tailored weekly exercises and therapeutic challenges designed specifically for your personal goals and mental wellbeing.',
+      icon: (color: string) => (
+        <Svg width={100} height={100} viewBox="0 0 24 24" fill="none">
+          <Path d="M9 20L3 17V4L9 7L15 4L21 7V20L15 17L9 20Z" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M9 7V20" stroke={color} strokeWidth={1.5} />
+          <Path d="M15 4V17" stroke={color} strokeWidth={1.5} />
+        </Svg>
+      )
+    },
+    {
+      title: language === 'ar' ? 'متابعة المزاج والمؤشرات' : 'Track Mood & Insights',
+      description: language === 'ar'
+        ? 'دون مشاعرك اليومية، واكتب مذكراتك، وراقب تحسن حالتك المزاجية من خلال تقارير وتحليلات ذكية ومفصلة.'
+        : 'Track your feelings, write in your safe journal, and observe your emotional progress through intelligent, personalized insights.',
+      icon: (color: string) => (
+        <Svg width={100} height={100} viewBox="0 0 24 24" fill="none">
+          <Path d="M3 3v18h18" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M18.5 7.5L13 13L9.5 9.5L5 14" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      )
+    },
+    {
+      title: language === 'ar' ? 'راحة فورية وتهدئة' : 'Instant Relief & Calming',
+      description: language === 'ar'
+        ? 'تمارين تنفس موجهة ومؤقتات تركيز وتهدئة سريعة لمساعدتك في التغلب على التوتر والقلق في أي وقت وأي مكان.'
+        : 'Access guided breathing sessions and focus timers built to instantly ground you and calm your mind whenever you feel overwhelmed.',
+      icon: (color: string) => (
+        <Svg width={100} height={100} viewBox="0 0 24 24" fill="none">
+          <Path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" stroke={color} strokeWidth={1.5} />
+          <Path d="M12 6v6l4 2" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      )
+    }
+  ];
 
   // Fetch questions from backend
   const fetchQuestions = async () => {
@@ -132,6 +190,130 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
   const isQuestion9 = currentStep === 9 || question.questionId === 9;
   const isSingleChoice = !isQuestion9;
 
+  if (showTutorial) {
+    const slide = TUTORIAL_SLIDES[tutorialStep];
+    const isLastSlide = tutorialStep === TUTORIAL_SLIDES.length - 1;
+
+    return (
+      <SafeAreaView style={s.safeArea}>
+        <View style={s.container}>
+          {/* Top Row with Skip */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#64748B' }}>Mentora Tour</Text>
+            <TouchableOpacity onPress={() => setShowTutorial(false)}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary, textDecorationLine: 'underline' }}>
+                {language === 'ar' ? 'تخطي التعريف' : 'Skip Tour'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Slide Content Card */}
+          <View style={{
+            flex: 1,
+            backgroundColor: '#F8FAFC',
+            borderRadius: 32,
+            padding: 24,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: '#F1F5F9',
+            marginBottom: 20,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.02,
+            shadowRadius: 12,
+            elevation: 2
+          }}>
+            <View style={{
+              width: 160,
+              height: 160,
+              borderRadius: 80,
+              backgroundColor: '#FFFFFF',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 32,
+              shadowColor: colors.primary,
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.06,
+              shadowRadius: 16,
+              elevation: 4
+            }}>
+              {slide.icon(colors.primary)}
+            </View>
+
+            <Text style={{
+              fontSize: 24,
+              fontWeight: '800',
+              color: '#1E293B',
+              textAlign: 'center',
+              marginBottom: 16
+            }}>
+              {slide.title}
+            </Text>
+
+            <Text style={{
+              fontSize: 14,
+              color: '#64748B',
+              textAlign: 'center',
+              lineHeight: 22,
+              paddingHorizontal: 12
+            }}>
+              {slide.description}
+            </Text>
+          </View>
+
+          {/* Indicators & Actions */}
+          <View style={{ marginBottom: 30 }}>
+            {/* Dots */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 24 }}>
+              {TUTORIAL_SLIDES.map((_, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: i === tutorialStep ? 24 : 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: i === tutorialStep ? colors.primary : '#E2E8F0'
+                  }}
+                />
+              ))}
+            </View>
+
+            {/* CTA Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#1E293B',
+                borderRadius: 16,
+                paddingVertical: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 8,
+                elevation: 4
+              }}
+              onPress={() => {
+                if (isLastSlide) {
+                  setShowTutorial(false);
+                } else {
+                  setTutorialStep(prev => prev + 1);
+                }
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 }}>
+                {isLastSlide 
+                  ? (language === 'ar' ? 'ابدأ الاستبيان الآن 🚀' : 'Get Started 🚀')
+                  : (language === 'ar' ? 'التالي ➔' : 'Next Step ➔')
+                }
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={s.safeArea}>
       <View style={s.container}>
@@ -140,7 +322,7 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
         <View style={s.header}>
           <View style={[s.headerTopRow, isRTL && { flexDirection: 'row-reverse' }]}>
             <Text style={[s.welcomeText, isRTL && s.rtlText]}>
-              {t.onboarding.welcome}, {userName || 'Friend'}! 👋
+              {t.onboarding.welcome}, {userName || 'Friend'}!
             </Text>
             <TouchableOpacity onPress={logout} activeOpacity={0.7}>
               <Text style={s.logoutText}>{t.profile.logOut}</Text>

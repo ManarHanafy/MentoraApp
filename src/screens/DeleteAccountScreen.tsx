@@ -43,10 +43,18 @@ export function DeleteAccountScreen(): React.ReactElement {
                   '@mentora_user_name',
                   '@mentora_auth_token',
                   '@mentora_has_account',
+                  '@mentora_user_password',
+                  '@mentora_user_phone',
+                  '@mentora_user_dob',
+                  '@mentora_user_gender',
+                  '@mentora_onboarding_done',
+                  '@mentora_tutorial_done',
                 ];
                 if (cleanEmail) {
                   keysToRemove.push(`@mentora_onboarding_done_${cleanEmail}`);
                   keysToRemove.push(`@mentora_journal_entries_${cleanEmail}`);
+                  keysToRemove.push(`@mentora_tutorial_done_${cleanEmail}`);
+                  keysToRemove.push(`@mentora_tour_insights_done_${cleanEmail}`);
                 }
                 await AsyncStorage.multiRemove(keysToRemove);
                 
