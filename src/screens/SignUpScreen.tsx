@@ -63,7 +63,6 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
   
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState('Female');
   const [password, setPassword] = useState('');
@@ -125,7 +124,6 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
   // Validation States
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [phoneError, setPhoneError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
   const validateEmail = (text: string) => {
@@ -160,34 +158,10 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
     }
   };
 
-  const validatePhone = (text: string) => {
-    setPhone(text);
-    if (text.length === 0) {
-      setPhoneError('');
-      return;
-    }
-    
-    const clean = text.replace(/[\s-]/g, '');
-    
-    // Exact Egyptian formats:
-    // +201[0125]XXXXXXXX (13 chars)
-    // 201[0125]XXXXXXXX (12 chars)
-    // 01[0125]XXXXXXXX (11 chars)
-    const isValidEG = /^\+201[0125]\d{8}$/.test(clean) || /^201[0125]\d{8}$/.test(clean) || /^01[0125]\d{8}$/.test(clean);
-    
-    if (!isValidEG) {
-      setPhoneError(
-        language === 'ar'
-          ? 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)'
-          : 'Please enter a valid Egyptian phone number (e.g., 01012345678)'
-      );
-    } else {
-      setPhoneError('');
-    }
-  };
+
 
   const handleSignUp = async () => {
-    if (!name || !email || !password || !phone) {
+    if (!name || !email || !password) {
       Alert.alert(
         language === 'ar' ? 'حقول مطلوبة' : 'Missing Fields',
         language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة.' : 'Please fill in all required fields.'
@@ -202,16 +176,6 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
       );
       return;
     }
-    
-    const cleanPhone = phone.replace(/[\s-]/g, '');
-    const isValidEG = /^\+201[0125]\d{8}$/.test(cleanPhone) || /^201[0125]\d{8}$/.test(cleanPhone) || /^01[0125]\d{8}$/.test(cleanPhone);
-    if (!isValidEG) {
-      Alert.alert(
-        language === 'ar' ? 'رقم هاتف غير صحيح' : 'Invalid Phone Number',
-        language === 'ar' ? 'يرجى إدخال رقم هاتف مصري صحيح.' : 'Please enter a valid Egyptian phone number.'
-      );
-      return;
-    }
 
     if (password !== confirmPassword) {
       Alert.alert(
@@ -220,7 +184,7 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
       );
       return;
     }
-    if (emailError || passwordError || phoneError || confirmPasswordError) {
+    if (emailError || passwordError || confirmPasswordError) {
       Alert.alert(
         language === 'ar' ? 'خطأ في النموذج' : 'Form Error',
         language === 'ar' ? 'يرجى تصحيح الأخطاء في النموذج أولاً.' : 'Please correct the errors in the form.'
@@ -231,7 +195,7 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
     // Register directly — no email verification step
     setIsLoading(true);
     try {
-      await signUp({ email, password, name, phone, dob, gender });
+      await signUp({ email, password, name, phone: '', dob, gender });
     } catch (e: any) {
       Alert.alert(
         language === 'ar' ? 'فشل التسجيل' : 'Registration Failed',
@@ -287,19 +251,7 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
             </View>
             {emailError ? <Text style={s.errorHint}>{emailError}</Text> : null}
 
-            <Text style={s.label}>Phone Number</Text>
-            <View style={[s.inputContainer, phoneError ? s.inputError : null]}>
-              <PhoneIcon />
-              <TextInput
-                style={s.input}
-                placeholder="+20 123 456 7890"
-                placeholderTextColor="#A0AEC0"
-                value={phone}
-                onChangeText={validatePhone}
-                keyboardType="phone-pad"
-              />
-            </View>
-            {phoneError ? <Text style={s.errorHint}>{phoneError}</Text> : null}
+
 
             <Text style={s.label}>Date of Birth</Text>
             <TouchableOpacity style={s.inputContainer} onPress={handleOpenDatePicker}>

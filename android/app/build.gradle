@@ -123,9 +123,8 @@ dependencies {
     }
 }
 
-project.afterEvaluate {
-    def bundleTask = tasks.findByName("createBundleReleaseJsAndAssets")
-    if (bundleTask != null) {
+tasks.configureEach { task ->
+    if (task.name == "createBundleReleaseJsAndAssets") {
         def deps = [
             "generateReactNativeEntryPoint",
             "generateAutolinkingPackageList",
@@ -138,20 +137,20 @@ project.afterEvaluate {
             "extractReleaseNativeSymbolTables",
             "stripReleaseDebugSymbols",
             "buildKotlinToolingMetadata",
-            "mergeReleaseNativeDebugMetadata"
+            "mergeReleaseNativeDebugMetadata",
+            "configureCMakeRelWithDebInfo[arm64-v8a]",
+            "configureCMakeRelWithDebInfo[armeabi-v7a]",
+            "configureCMakeRelWithDebInfo[x86]",
+            "configureCMakeRelWithDebInfo[x86_64]",
+            "buildCMakeRelWithDebInfo[arm64-v8a]",
+            "buildCMakeRelWithDebInfo[armeabi-v7a]",
+            "buildCMakeRelWithDebInfo[x86]",
+            "buildCMakeRelWithDebInfo[x86_64]"
         ]
-        deps.each { dep ->
-            def taskDep = tasks.findByName(dep)
-            if (taskDep != null) {
-                bundleTask.dependsOn(taskDep)
-            }
-        }
-        
-        // Handle parameterized tasks
-        tasks.all { Task task ->
-            if (task.name.startsWith("configureCMakeRelWithDebInfo") || 
-                task.name.startsWith("buildCMakeRelWithDebInfo")) {
-                bundleTask.dependsOn(task)
+        deps.each { depName ->
+            def depTask = tasks.findByName(depName)
+            if (depTask != null) {
+                task.dependsOn(depTask)
             }
         }
     }

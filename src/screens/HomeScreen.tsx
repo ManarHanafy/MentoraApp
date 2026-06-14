@@ -52,6 +52,10 @@ export function HomeScreen(): React.ReactElement {
   const [saySomethingVisible, setSaySomethingVisible] = useState(false);
   const [moodMessage, setMoodMessage] = useState('');
 
+  // Mood Cooldown State
+  const [moodCooldownExpiry, setMoodCooldownExpiry] = useState<number | null>(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+
   // Queue State
   const [pendingQueue, setPendingQueue] = useState<any[]>([]);
   const [recentHistory, setRecentHistory] = useState<any[]>([]);
@@ -166,6 +170,32 @@ export function HomeScreen(): React.ReactElement {
       });
       loadData();
 
+      // Check mood cooldown on focus
+      const checkMoodCooldown = async () => {
+        try {
+          const userEmail = email ? email.trim().toLowerCase() : '';
+          const key = `@mentora_mood_cooldown_expiry_${userEmail}`;
+          const stored = await AsyncStorage.getItem(key);
+          if (stored) {
+            const expiry = parseInt(stored, 10);
+            if (expiry > Date.now()) {
+              setMoodCooldownExpiry(expiry);
+              setCooldownRemaining(Math.ceil((expiry - Date.now()) / 1000));
+            } else {
+              await AsyncStorage.removeItem(key);
+              setMoodCooldownExpiry(null);
+              setCooldownRemaining(0);
+            }
+          } else {
+            setMoodCooldownExpiry(null);
+            setCooldownRemaining(0);
+          }
+        } catch (e) {
+          console.warn('Failed to load mood cooldown', e);
+        }
+      };
+      checkMoodCooldown();
+
       // Poll every 45s for the session-complete flag set by ChatScreen.finalizeChat (optimized for battery and memory)
       pollingRef.current = setInterval(async () => {
         // Run timeout check first
@@ -205,8 +235,44 @@ export function HomeScreen(): React.ReactElement {
           pollingRef.current = null;
         }
       };
-    }, [])
+    }, [email])
   );
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (moodCooldownExpiry) {
+      const updateTimer = async () => {
+        const diff = Math.ceil((moodCooldownExpiry - Date.now()) / 1000);
+        if (diff <= 0) {
+          setMoodCooldownExpiry(null);
+          setCooldownRemaining(0);
+          try {
+            const userEmail = email ? email.trim().toLowerCase() : '';
+            const key = `@mentora_mood_cooldown_expiry_${userEmail}`;
+            await AsyncStorage.removeItem(key);
+          } catch (e) {}
+        } else {
+          setCooldownRemaining(diff);
+        }
+      };
+      updateTimer();
+      interval = setInterval(updateTimer, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [moodCooldownExpiry, email]);
+
+  const formatCountdown = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    if (h > 0) {
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    return `${pad(m)}:${pad(s)}`;
+  };
 
   const loadData = async () => {
     try {
@@ -290,6 +356,15 @@ export function HomeScreen(): React.ReactElement {
     try {
       const result = await MoodService.submitMood(moodLevel, moodMessage);
       
+      // Set 1-hour cooldown
+      const duration = 60 * 60 * 1000; // 1 hour in ms
+      const expiry = Date.now() + duration;
+      const userEmail = email ? email.trim().toLowerCase() : '';
+      const key = `@mentora_mood_cooldown_expiry_${userEmail}`;
+      await AsyncStorage.setItem(key, String(expiry));
+      setMoodCooldownExpiry(expiry);
+      setCooldownRemaining(Math.ceil(duration / 1000));
+
       if (result.exercises && result.exercises.length > 0) {
         Alert.alert(
           t.home.moodTracked,
@@ -668,7 +743,7 @@ export function HomeScreen(): React.ReactElement {
                                  }}
                               >
                                  <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>
-                                    {language === 'ar' ? 'عرض خارطة الطريق' : 'View Journey'}
+                                    {language === 'ar' ? 'عرض خارطة الطريق' : 'View Roadmap'}
                                  </Text>
                               </TouchableOpacity>
                            </View>
@@ -735,9 +810,10 @@ export function HomeScreen(): React.ReactElement {
               <TouchableOpacity
                 key={index}
                 onPress={() => handleEmojiPress(index + 1)}
+                disabled={cooldownRemaining > 0}
                 style={{
                   padding: 6,
-                  opacity: isSelected ? 1 : 0.4,
+                  opacity: cooldownRemaining > 0 ? 0.2 : (isSelected ? 1 : 0.4),
                   transform: [{ scale: isSelected ? 1.15 : 1.0 }],
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -761,8 +837,8 @@ export function HomeScreen(): React.ReactElement {
             <Text style={styles.sliderLabelText}>{t.home.high}</Text>
           </View>
           <View style={[styles.sliderTrack, { width: TRACK_WIDTH }]}>
-            <View style={[styles.sliderFill, { width: `${fillWidth}%` }]} />
-            <View style={[styles.sliderThumb, { left: Math.max(0, thumbLeft) }]} />
+            <View style={[styles.sliderFill, { width: `${fillWidth}%`, backgroundColor: cooldownRemaining > 0 ? '#CBD5E1' : colors.primary }]} />
+            <View style={[styles.sliderThumb, { left: Math.max(0, thumbLeft), backgroundColor: cooldownRemaining > 0 ? '#E2E8F0' : colors.textLight, borderColor: cooldownRemaining > 0 ? '#94A3B8' : colors.primary }]} />
           </View>
           <Text style={[styles.moodLevelText, isRTL && { textAlign: 'right' }]}>{t.home.moodLevel}: {moodLevel}/5</Text>
         </View>
@@ -770,9 +846,49 @@ export function HomeScreen(): React.ReactElement {
           style={styles.needToSayTouch}
           onPress={() => setSaySomethingVisible(true)}
           accessibilityLabel="Need to say something?"
+          disabled={cooldownRemaining > 0}
         >
-          <Text style={[styles.needToSayText, isRTL && { textAlign: 'right' }]}>{t.home.needToSay}</Text>
+          <Text style={[
+            styles.needToSayText,
+            isRTL && { textAlign: 'right' },
+            cooldownRemaining > 0 && { color: '#94A3B8', textDecorationLine: 'none' }
+          ]}>
+            {t.home.needToSay}
+          </Text>
         </TouchableOpacity>
+
+        {cooldownRemaining > 0 && (
+          <View style={[StyleSheet.absoluteFill, {
+            backgroundColor: 'rgba(241, 245, 249, 0.9)',
+            borderRadius: 24,
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10,
+            padding: 20,
+          }]}>
+            <Svg width={36} height={36} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 8 }}>
+              <Circle cx="12" cy="12" r="10" stroke="#64748B" strokeWidth={2.5} />
+              <Path d="M12 6v6l4 2" stroke="#64748B" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+            <Text style={{
+              fontSize: 15,
+              fontWeight: '700',
+              color: '#475569',
+              marginBottom: 4,
+              textAlign: 'center',
+            }}>
+              {t.home.moodLoggedSuccessfully}
+            </Text>
+            <Text style={{
+              fontSize: 13,
+              fontWeight: '600',
+              color: '#64748B',
+              textAlign: 'center',
+            }}>
+              {t.home.moodCooldown}{formatCountdown(cooldownRemaining)}
+            </Text>
+          </View>
+        )}
       </Card>
       </View>
 
@@ -824,7 +940,7 @@ export function HomeScreen(): React.ReactElement {
       <View style={{ marginBottom: 20 }}>
           <TouchableOpacity 
             style={[styles.activityCard, isRTL && { flexDirection: 'row-reverse' }]}
-            onPress={() => (navigation as any).navigate('Insights')}
+            onPress={() => (navigation as any).navigate('Insights', { initialTab: 'Overview' })}
           >
              <View style={[styles.activityIconWrap, { backgroundColor: '#E0E7FF' }]}>
                 <InsightsIcon color="#4F46E5" size={20} />
@@ -838,7 +954,7 @@ export function HomeScreen(): React.ReactElement {
 
           <TouchableOpacity 
             style={[styles.activityCard, isRTL && { flexDirection: 'row-reverse' }]}
-            onPress={() => (navigation as any).navigate('Insights')}
+            onPress={() => (navigation as any).navigate('Insights', { initialTab: 'Trends' })}
           >
              <View style={[styles.activityIconWrap, { backgroundColor: '#FEE2E2' }]}>
                 <TrophyIcon color="#EF4444" size={20} />

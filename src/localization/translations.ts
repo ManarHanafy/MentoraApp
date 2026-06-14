@@ -36,7 +36,7 @@ export const en = {
     goodMorning: 'Good morning',
     goodAfternoon: 'Good afternoon',
     goodEvening: 'Good evening',
-    howAreYou: 'How are you feeling?',
+    howAreYou: 'How are you feeling today?',
     moodLevel: 'Mood Level',
     low: 'Low',
     high: 'High',
@@ -70,6 +70,8 @@ export const en = {
     later: 'Later',
     sessionEnded: 'Session Ended 🌿',
     sessionEndedMsg: 'Your conversation session has been completed and summarized.',
+    moodCooldown: 'Next check-in in: ',
+    moodLoggedSuccessfully: 'Mood Logged Successfully',
   },
 
   // ── Chat ─────────────────────────────────────────────────────────────────
@@ -106,6 +108,15 @@ export const en = {
     saveSuccess: 'Journal entry saved successfully.',
     saveFailed: 'Failed to save journal entry. Please try again.',
     aiUnavailable: 'AI analysis is currently unavailable.',
+    setPinTitle: 'Set Journal PIN',
+    setPinDesc: 'Please create a 4-digit PIN to protect your locked entries.',
+    enterPinTitle: 'Unlock Entry',
+    enterPinDesc: 'Enter your 4-digit PIN to read this locked journal entry.',
+    incorrectPin: 'Incorrect PIN',
+    forgotPin: 'Forgot PIN?',
+    pinMismatch: 'PINs do not match',
+    savePin: 'Save PIN',
+    enterPin: 'Enter PIN',
   },
 
   // ── Insights / Dashboard ─────────────────────────────────────────────────
@@ -147,6 +158,11 @@ export const en = {
     changePassword: 'Change Password',
     deleteAccount: 'Delete Account',
     lockedInMentora: 'Locked in Mentora AI',
+    changeJournalPin: 'Change Journal PIN',
+    verifyTitle: 'Verify Credentials',
+    verifyDesc: 'Enter your email and password to change or reset your PIN.',
+    invalidCredentials: 'Invalid email or password.',
+    pinChangedSuccess: 'Journal PIN updated successfully.',
   },
 
   // ── Language Screen ──────────────────────────────────────────────────────
@@ -317,7 +333,7 @@ export const ar: TranslationKeys = {
     goodMorning: 'صباح الخير',
     goodAfternoon: 'مساء الخير',
     goodEvening: 'مساء النور',
-    howAreYou: 'كيف حالك؟',
+    howAreYou: 'كيف حالك اليوم؟',
     moodLevel: 'مستوى المزاج',
     low: 'منخفض',
     high: 'مرتفع',
@@ -351,6 +367,8 @@ export const ar: TranslationKeys = {
     later: 'لاحقاً',
     sessionEnded: 'انتهت الجلسة 🌿',
     sessionEndedMsg: 'تم إنهاء جلستك وتلخيصها.',
+    moodCooldown: 'التسجيل التالي خلال: ',
+    moodLoggedSuccessfully: 'تم تسجيل مزاجك بنجاح',
   },
 
   chat: {
@@ -385,6 +403,15 @@ export const ar: TranslationKeys = {
     saveSuccess: 'تم حفظ اليومية بنجاح.',
     saveFailed: 'فشل حفظ اليومية. يرجى المحاولة مجدداً.',
     aiUnavailable: 'تحليل الذكاء الاصطناعي غير متاح حالياً.',
+    setPinTitle: 'إعداد رمز PIN لليوميات',
+    setPinDesc: 'يرجى إنشاء رمز PIN من 4 أرقام لحماية تدويناتك المغلقة.',
+    enterPinTitle: 'إلغاء قفل التدوينة',
+    enterPinDesc: 'أدخل رمز PIN المكون من 4 أرقام لقراءة هذه التدوينة المغلقة.',
+    incorrectPin: 'رمز PIN غير صحيح',
+    forgotPin: 'نسيت رمز PIN؟',
+    pinMismatch: 'رموز PIN غير متطابقة',
+    savePin: 'حفظ رمز PIN',
+    enterPin: 'أدخل رمز PIN',
   },
 
   insights: {
@@ -423,6 +450,11 @@ export const ar: TranslationKeys = {
     changePassword: 'تغيير كلمة المرور',
     deleteAccount: 'حذف الحساب',
     lockedInMentora: 'مقيّد بمنتورا AI',
+    changeJournalPin: 'تغيير رمز PIN لليوميات',
+    verifyTitle: 'التحقق من البيانات',
+    verifyDesc: 'أدخل بريدك الإلكتروني وكلمة المرور لتغيير أو إعادة تعيين رمز PIN.',
+    invalidCredentials: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+    pinChangedSuccess: 'تم تحديث رمز PIN لليوميات بنجاح.',
   },
 
   languageScreen: {

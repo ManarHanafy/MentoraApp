@@ -385,7 +385,7 @@ export const styles = StyleSheet.create({
   },
   mentoraCancelBtn: {
     flex: 1,
-    paddingVertical: spacing.md,
+    height: 44,
     borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -394,12 +394,13 @@ export const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   mentoraCancelText: {
-    ...typography.button,
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.textPrimary,
   },
   mentoraOkBtn: {
     flex: 1,
-    paddingVertical: spacing.md,
+    height: 44,
     borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -416,5 +417,24 @@ export const styles = StyleSheet.create({
   listEmptyText: {
     ...typography.bodySmall,
     color: colors.textMuted,
+  },
+  pinModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  pinModalCard: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 350,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 6,
   },
 });

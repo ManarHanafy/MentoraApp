@@ -8,17 +8,15 @@ import { useLanguage } from '../context/LanguageContext';
 
 export function EditProfileScreen(): React.ReactElement {
   const navigation = useNavigation();
-  const { userName, email: contextEmail, phone: contextPhone, dob: contextDob, gender: contextGender, updateProfile } = useAuth();
+  const { userName, email: contextEmail, dob: contextDob, gender: contextGender, updateProfile } = useAuth();
   const { t, isRTL, language } = useLanguage();
 
   const [name, setName] = useState(userName || '');
   const [email, setEmail] = useState(contextEmail || '');
-  const [phone, setPhone] = useState(contextPhone || '');
   const [dob, setDob] = useState(contextDob || '');
   const [gender, setGender] = useState(contextGender || '');
 
-  // Phone Validation State
-  const [phoneError, setPhoneError] = useState('');
+
 
   // Date Picker States
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -68,28 +66,10 @@ export function EditProfileScreen(): React.ReactElement {
     setDatePickerVisible(false);
   };
 
-  const validatePhone = (text: string) => {
-    setPhone(text);
-    if (text.length === 0) {
-      setPhoneError('');
-      return;
-    }
-    const clean = text.replace(/[\s-]/g, '');
-    const isValidEG = /^\+201[0125]\d{8}$/.test(clean) || /^201[0125]\d{8}$/.test(clean) || /^01[0125]\d{8}$/.test(clean);
-    
-    if (!isValidEG) {
-      setPhoneError(
-        language === 'ar'
-          ? 'يرجى إدخال رقم هاتف مصري صحيح (مثال: 01012345678)'
-          : 'Please enter a valid Egyptian phone number (e.g., 01012345678)'
-      );
-    } else {
-      setPhoneError('');
-    }
-  };
+
 
   const handleSave = async () => {
-     if (!name || !email || !phone) {
+     if (!name || !email) {
         Alert.alert(
            language === 'ar' ? 'حقول مطلوبة' : 'Missing Fields',
            language === 'ar' ? 'يرجى ملء جميع الحقول المطلوبة.' : 'Please fill in all required fields.'
@@ -97,25 +77,7 @@ export function EditProfileScreen(): React.ReactElement {
         return;
      }
 
-     const cleanPhone = phone.replace(/[\s-]/g, '');
-     const isValidEG = /^\+201[0125]\d{8}$/.test(cleanPhone) || /^201[0125]\d{8}$/.test(cleanPhone) || /^01[0125]\d{8}$/.test(cleanPhone);
-     if (!isValidEG) {
-        Alert.alert(
-           language === 'ar' ? 'رقم هاتف غير صحيح' : 'Invalid Phone Number',
-           language === 'ar' ? 'يرجى إدخال رقم هاتف مصري صحيح.' : 'Please enter a valid Egyptian phone number.'
-        );
-        return;
-     }
-
-     if (phoneError) {
-        Alert.alert(
-           language === 'ar' ? 'خطأ في النموذج' : 'Form Error',
-           language === 'ar' ? 'يرجى تصحيح الأخطاء في النموذج أولاً.' : 'Please correct the errors in the form.'
-        );
-        return;
-     }
-
-     await updateProfile({ userName: name, email, phone, dob, gender });
+     await updateProfile({ userName: name, email, phone: '', dob, gender });
      navigation.goBack();
   };
 
@@ -165,19 +127,7 @@ export function EditProfileScreen(): React.ReactElement {
             </View>
          </View>
 
-         <View style={s.inputGroup}>
-            <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.phone}</Text>
-            <View style={[s.inputWrapper, phoneError ? { borderColor: '#EF4444', borderWidth: 1 } : null]}>
-               <TextInput 
-                  style={[s.input, { textAlign: textDir }]} 
-                  value={phone}
-                  onChangeText={validatePhone}
-                  keyboardType="phone-pad"
-                  placeholderTextColor={colors.textMuted}
-               />
-            </View>
-            {phoneError ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, textAlign: textDir }}>{phoneError}</Text> : null}
-         </View>
+
 
          <View style={s.inputGroup}>
             <Text style={[s.label, { textAlign: textDir }]}>{t.editProfile.dob}</Text>

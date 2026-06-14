@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Act
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography } from '../theme';
 import { Exercise, ExerciseService } from '../services/exerciseService';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { API_BASE_URL } from '../config/env';
 import { useLanguage } from '../context/LanguageContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,7 +80,15 @@ const CustomBarChart = ({ labels, data, maxVal = 5 }: { labels: string[], data: 
 
 export function DashboardScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+
+  useEffect(() => {
+    if (route.params?.initialTab) {
+      setActiveTab(route.params.initialTab);
+      navigation.setParams({ initialTab: undefined });
+    }
+  }, [route.params?.initialTab]);
   const [suggestedExercise, setSuggestedExercise] = useState<Exercise | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -382,7 +390,7 @@ export function DashboardScreen(): React.ReactElement {
             </View>
             <Text style={[s.cardValue, isRTL && { textAlign: 'right' }]}>{stats.avgMood > 0 ? stats.avgMood : hasActivity ? '—' : '—'}</Text>
             <Text style={[s.cardSubValueGreen, isRTL && { textAlign: 'right' }]}>
-              {stats.avgMood > 0 ? (language === 'ar' ? 'بناءً على اليوميات' : 'Based on journals') : (language === 'ar' ? 'ابدأ كتابة اليوميات!' : 'Start journaling!')}
+              {language === 'ar' ? 'بناءً على المزاج' : 'Based on moods'}
             </Text>
           </View>
           <TouchableOpacity 
@@ -682,7 +690,12 @@ export function DashboardScreen(): React.ReactElement {
           };
 
           return (
-            <View key={idx} style={[s.card, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F1F5F9', padding: 16, borderRadius: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }]}>
+            <TouchableOpacity 
+              key={idx} 
+              style={[s.card, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#F1F5F9', padding: 16, borderRadius: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }]}
+              onPress={() => navigation.navigate('Exercises', { category: item.type })}
+              activeOpacity={0.8}
+            >
               <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }, isRTL && { flexDirection: 'row-reverse' }]}>
                 <View style={[{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }, isRTL ? { marginLeft: 12 } : { marginRight: 12 }]}>
                   <TypeIcon type={item.type} size={18} color={colors.primary} />
@@ -701,7 +714,7 @@ export function DashboardScreen(): React.ReactElement {
               <Text style={[{ fontSize: 11, color: '#94A3B8', marginTop: 8 }, isRTL && { textAlign: 'right' }]}>
                 {language === 'ar' ? `أكملت ${item.completed} من أصل ${item.target} جلسات` : `${item.completed} of ${item.target} sessions done`}
               </Text>
-            </View>
+            </TouchableOpacity>
           );
         }) : (
           <View style={{ alignItems: 'center', padding: 32 }}>

@@ -311,6 +311,15 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     return () => clearTimeout(timer);
   }, [countdown, isPaused]);
 
+  useEffect(() => {
+    if (route?.params?.category) {
+      setActiveTab(route.params.category);
+      setShowHistoryOnly(true);
+      navigation.setParams({ category: undefined });
+    }
+  }, [route?.params?.category]);
+
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -342,7 +351,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         if (ex && !suggestedExercise) {
           // Enrich with library details if missing or generic
           if (ex.exerciseCode) {
-            const details = ExerciseService.getExerciseDetailsByCode(ex.exerciseCode);
+            const details = await ExerciseService.getExerciseDetailsFromServer(ex.exerciseCode);
             ex = { ...ex, ...details };
           }
           setSuggestedExercise(ex);
@@ -351,10 +360,16 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
              navigation.setParams({ exerciseToStart: null });
           }
         }
-      } else if (!showHistoryOnly && safeSuggested.length > 0 && !suggestedExercise) {
+      } else if (
+        !showHistoryOnly &&
+        safeSuggested.length > 0 &&
+        !suggestedExercise &&
+        !route?.params?.openRoadmap &&
+        !route?.params?.category
+      ) {
         let ex = safeSuggested[0];
         if (ex.exerciseCode) {
-           const details = ExerciseService.getExerciseDetailsByCode(ex.exerciseCode);
+           const details = await ExerciseService.getExerciseDetailsFromServer(ex.exerciseCode);
            ex = { ...ex, ...details };
         }
         setSuggestedExercise(ex);
@@ -366,8 +381,10 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       setLoading(false);
       if (route?.params?.openRoadmap === true) {
         setShowRoadmapModal(true);
+        setShowHistoryOnly(true);
         navigation.setParams({ openRoadmap: undefined });
       }
+
     }
   };
 
@@ -440,31 +457,60 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     }
   };
 
-  const startRoadmapExercise = (code: string) => {
-    const details = ExerciseService.getExerciseDetailsByCode(code);
-    const exerciseObj: Exercise = {
-      id: code,
-      name: details.name || code,
-      description: details.description || '',
-      exerciseType: details.exerciseType || 'General',
-      durationMinutes: details.durationMinutes || 5,
-      difficulty: details.difficulty || 'Medium',
-      instructions: details.instructions || '',
-      isActive: true,
-      exerciseCode: code,
-      goals: details.goals,
-      frequency: details.frequency,
-      researchBasis: details.researchBasis,
-      tips: details.tips,
-      videoUrl: details.videoUrl,
-      videoTitle: details.videoTitle
-    };
-    setShowRoadmapModal(false);
-    setSuggestedExercise(exerciseObj);
-    setIsAiSession(true);
-    setShowHistoryOnly(false);
-    setSessionFinished(false);
-    setCountdown(null);
+  const startRoadmapExercise = async (code: string) => {
+    setLoading(true);
+    try {
+      const details = await ExerciseService.getExerciseDetailsFromServer(code);
+      const exerciseObj: Exercise = {
+        id: code,
+        name: details.name || code,
+        description: details.description || '',
+        exerciseType: details.exerciseType || 'General',
+        durationMinutes: details.durationMinutes || 5,
+        difficulty: details.difficulty || 'Medium',
+        instructions: details.instructions || '',
+        isActive: true,
+        exerciseCode: code,
+        goals: details.goals,
+        frequency: details.frequency,
+        researchBasis: details.researchBasis,
+        tips: details.tips,
+        videoUrl: details.videoUrl,
+        videoTitle: details.videoTitle
+      };
+      setShowRoadmapModal(false);
+      setSuggestedExercise(exerciseObj);
+      setIsAiSession(true);
+      setShowHistoryOnly(false);
+      setSessionFinished(false);
+      setCountdown(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectExercise = async (ex: Exercise) => {
+    setLoading(true);
+    try {
+      const code = ex.exerciseCode || String(ex.id);
+      const details = await ExerciseService.getExerciseDetailsFromServer(code);
+      setSuggestedExercise({ ...ex, ...details });
+      setIsAiSession(true);
+      setShowHistoryOnly(false);
+      setSessionFinished(false);
+      setCountdown(null);
+    } catch (err) {
+      console.warn('Error selecting exercise:', err);
+      setSuggestedExercise(ex);
+      setIsAiSession(true);
+      setShowHistoryOnly(false);
+      setSessionFinished(false);
+      setCountdown(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredExercises = exercises.filter(ex => {
@@ -1191,59 +1237,59 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         </View>
       </ScrollView>
 
-      {/* Dynamic Wellness Card with Conditional Styles */}
-      <View style={[
-        s.featuredCard,
-        activeTab === 'All' ? s.featuredCardLarge : s.featuredCardSmall
-      ]}>
-        <View style={s.featuredHeader}>
-          {(() => {
-            const iconSize = 24;
-            let iconColor = '#FFFFFF';
-            switch(activeTab) {
-              case 'CBT': iconColor = '#10B981'; break;      // emerald green
-              case 'Breathing': iconColor = '#0EA5E9'; break;    // sky blue
-              case 'Sleep': iconColor = '#6366F1'; break;        // indigo
-              case 'Behavioral': iconColor = '#F43F5E'; break;   // rose
-              case 'Relaxation': iconColor = '#34D399'; break;   // mint
-              case 'Social': iconColor = '#FB7185'; break;       // coral pink
-              case 'Safety': iconColor = '#EF4444'; break;       // red
-              case 'Mindfulness': iconColor = '#A78BFA'; break;  // purple
-              default: iconColor = '#34D399'; break;             // mint leaf
-            }
-
-            const iconStyle = isRTL ? { marginLeft: 8 } : { marginRight: 8 };
-
-            switch(activeTab) {
-              case 'CBT': return <Brain size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Breathing': return <Wind size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Sleep': return <Moon size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Behavioral': return <Target size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Relaxation': return <Waves size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Social': return <Users size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Safety': return <Shield size={iconSize} color={iconColor} style={iconStyle} />;
-              case 'Mindfulness': return <Activity size={iconSize} color={iconColor} style={iconStyle} />;
-              default: return <Leaf size={iconSize} color={iconColor} style={iconStyle} />;
-            }
-          })()}
-          <Text style={[s.featuredHeaderText, isRTL && { textAlign: 'right' }]}>
-            {activeTab === 'All'
-              ? (language === 'ar' ? 'نصيحة الصحة النفسية اليومية' : 'Wellness Tip')
-              : (language === 'ar' ? `دليل ${activeTab === 'CBT' ? 'العلاج المعرفي السلوكي' : activeTab === 'Breathing' ? 'تمارين التنفس' : activeTab === 'Sleep' ? 'تحسين النوم' : activeTab === 'Behavioral' ? 'العلاج السلوكي' : activeTab === 'Relaxation' ? 'الاسترخاء العميق' : activeTab === 'Social' ? 'التواصل الاجتماعي' : activeTab === 'Safety' ? 'خطة السلامة' : activeTab === 'Mindfulness' ? 'اليقظة الذهنية' : activeTab}` : `${activeTab} Guide`)}
-          </Text>
-        </View>
-        <Text style={[s.featuredTitle, isRTL && { textAlign: 'right' }]}>{tipData.title}</Text>
-        <View style={{ marginTop: 8 }}>
-          {tipData.points.map((pt, idx) => (
-            <Text key={idx} style={[activeTab === 'All' ? s.featuredDesc : s.featuredDescSmall, isRTL && { textAlign: 'right' }]}>• {pt}</Text>
-          ))}
-        </View>
-      </View>
-
-      {/* Thin line separator for specific categories */}
-      {activeTab !== 'All' && <View style={s.separatorLine} />}
-
       <ScrollView style={s.listContainer}>
+        {/* Dynamic Wellness Card with Conditional Styles */}
+        <View style={[
+          s.featuredCard,
+          activeTab === 'All' ? s.featuredCardLarge : s.featuredCardSmall,
+          { marginHorizontal: 0 }
+        ]}>
+          <View style={s.featuredHeader}>
+            {(() => {
+              const iconSize = 24;
+              let iconColor = '#FFFFFF';
+              switch(activeTab) {
+                case 'CBT': iconColor = '#10B981'; break;      // emerald green
+                case 'Breathing': iconColor = '#0EA5E9'; break;    // sky blue
+                case 'Sleep': iconColor = '#6366F1'; break;        // indigo
+                case 'Behavioral': iconColor = '#F43F5E'; break;   // rose
+                case 'Relaxation': iconColor = '#34D399'; break;   // mint
+                case 'Social': iconColor = '#FB7185'; break;       // coral pink
+                case 'Safety': iconColor = '#EF4444'; break;       // red
+                case 'Mindfulness': iconColor = '#A78BFA'; break;  // purple
+                default: iconColor = '#34D399'; break;             // mint leaf
+              }
+
+              const iconStyle = isRTL ? { marginLeft: 8 } : { marginRight: 8 };
+
+              switch(activeTab) {
+                case 'CBT': return <Brain size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Breathing': return <Wind size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Sleep': return <Moon size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Behavioral': return <Target size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Relaxation': return <Waves size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Social': return <Users size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Safety': return <Shield size={iconSize} color={iconColor} style={iconStyle} />;
+                case 'Mindfulness': return <Activity size={iconSize} color={iconColor} style={iconStyle} />;
+                default: return <Leaf size={iconSize} color={iconColor} style={iconStyle} />;
+              }
+            })()}
+            <Text style={[s.featuredHeaderText, isRTL && { textAlign: 'right' }]}>
+              {activeTab === 'All'
+                ? (language === 'ar' ? 'نصيحة الصحة النفسية اليومية' : 'Wellness Tip')
+                : (language === 'ar' ? `دليل ${activeTab === 'CBT' ? 'العلاج المعرفي السلوكي' : activeTab === 'Breathing' ? 'تمارين التنفس' : activeTab === 'Sleep' ? 'تحسين النوم' : activeTab === 'Behavioral' ? 'العلاج السلوكي' : activeTab === 'Relaxation' ? 'الاسترخاء العميق' : activeTab === 'Social' ? 'التواصل الاجتماعي' : activeTab === 'Safety' ? 'خطة السلامة' : activeTab === 'Mindfulness' ? 'اليقظة الذهنية' : activeTab}` : `${activeTab} Guide`)}
+            </Text>
+          </View>
+          <Text style={[s.featuredTitle, isRTL && { textAlign: 'right' }]}>{tipData.title}</Text>
+          <View style={{ marginTop: 8 }}>
+            {tipData.points.map((pt, idx) => (
+              <Text key={idx} style={[activeTab === 'All' ? s.featuredDesc : s.featuredDescSmall, isRTL && { textAlign: 'right' }]}>• {pt}</Text>
+            ))}
+          </View>
+        </View>
+
+        {/* Thin line separator for specific categories */}
+        {activeTab !== 'All' && <View style={[s.separatorLine, { marginHorizontal: 20 }]} />}
         {activeTab === 'All' && !loading && (() => {
           const completedCount = history.length;
           const activeSuggested = pendingQueue.filter(s => 
@@ -1318,13 +1364,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
               <TouchableOpacity
                 key={`${ex.id}-${idx}`}
                 style={s.exerciseCard}
-                onPress={() => {
-                  setSuggestedExercise(ex);
-                  setIsAiSession(true);
-                  setShowHistoryOnly(false);
-                  setSessionFinished(false);
-                  setCountdown(null);
-                }}
+                onPress={() => handleSelectExercise(ex)}
               >
                 <View style={s.cardLeft}>
                   <View style={s.iconBox}>
@@ -1512,11 +1552,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                               onPress={() => {
                                 if (!isLocked) {
                                   setShowRoadmapModal(false);
-                                  setSuggestedExercise(ex);
-                                  setIsAiSession(true);
-                                  setShowHistoryOnly(false);
-                                  setSessionFinished(false);
-                                  setCountdown(null);
+                                  handleSelectExercise(ex);
                                 }
                               }}
                               style={[{

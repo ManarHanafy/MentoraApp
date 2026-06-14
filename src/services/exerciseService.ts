@@ -113,6 +113,77 @@ export const ExerciseService = {
     };
   },
 
+  getExerciseDetailsFromServer: async (idName: string): Promise<Partial<Exercise>> => {
+    // 1. Get local fallback details to merge rich content
+    const local = ExerciseService.getExerciseDetailsByCode(idName) || {};
+
+    try {
+      const token = await ExerciseService.getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/Exercises/id-name/${idName}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Check if server instructions are generic or empty
+        const isServerInstructionsPlaceholder = !data.instructions || 
+          data.instructions.trim().toLowerCase() === 'frequency: once daily' || 
+          data.instructions.trim().toLowerCase().startsWith('frequency:');
+          
+        let finalInstructions = '';
+        if (isServerInstructionsPlaceholder) {
+          finalInstructions = local.instructions || data.instructions || '';
+        } else {
+          finalInstructions = data.instructions || local.instructions || '';
+        }
+
+        // Parse tips: can be array or string
+        let finalTips = '';
+        if (Array.isArray(data.tips) && data.tips.length > 0) {
+          finalTips = data.tips.join('\n');
+        } else if (typeof data.tips === 'string' && data.tips.trim()) {
+          finalTips = data.tips;
+        } else {
+          finalTips = typeof local.tips === 'string' ? local.tips : (Array.isArray(local.tips) ? (local.tips as string[]).join('\n') : '');
+        }
+
+        // Parse goals
+        let finalGoals: string[] = [];
+        if (Array.isArray(data.goals) && data.goals.length > 0) {
+          finalGoals = data.goals;
+        } else if (local.goals && local.goals.length > 0) {
+          finalGoals = local.goals;
+        }
+
+        return {
+          id: data.id || data.Id || local.id || idName,
+          name: data.name || data.Name || local.name || idName,
+          description: data.fullDescription || data.Description || data.description || local.description || '',
+          exerciseType: data.exerciseType || data.type || data.ExerciseType || local.exerciseType || 'General',
+          durationMinutes: data.durationMinutes !== undefined ? data.durationMinutes : (data.DurationMinutes || local.durationMinutes || 5),
+          difficulty: data.difficulty || data.Difficulty || local.difficulty || 'Medium',
+          instructions: finalInstructions,
+          isActive: data.isActive !== undefined ? data.isActive : true,
+          exerciseCode: data.externalId || data.exerciseCode || data.ExerciseCode || idName,
+          goals: finalGoals,
+          frequency: data.frequency || data.Frequency || local.frequency,
+          researchBasis: data.researchBasis || data.ResearchBasis || local.researchBasis,
+          tips: finalTips,
+          videoUrl: data.videoUrl || data.VideoUrl || local.videoUrl,
+          videoTitle: data.videoTitle || data.VideoTitle || local.videoTitle
+        };
+      } else {
+        console.warn(`Exercise details API returned ${response.status} for ${idName}. Falling back to local.`);
+      }
+    } catch (error) {
+      console.warn(`Network error fetching details for ${idName}, falling back to local:`, error);
+    }
+    return local;
+  },
+
   getUserKey: async (baseKey: string): Promise<string> => {
     try {
       const email = await AsyncStorage.getItem('@mentora_user_email');

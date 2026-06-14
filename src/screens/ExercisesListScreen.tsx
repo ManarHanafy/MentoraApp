@@ -92,7 +92,10 @@ export function ExercisesListScreen(): React.ReactElement {
       const uncompletedSuggested = suggested.filter(s => !completed.some(c => c.id === s.id));
 
       if (uncompletedSuggested.length > 0 && !showHistoryOnly) {
-        setSuggestedExercise(uncompletedSuggested[0]);
+        const firstEx = uncompletedSuggested[0];
+        const code = firstEx.exerciseCode || String(firstEx.id);
+        const details = await ExerciseService.getExerciseDetailsFromServer(code);
+        setSuggestedExercise({ ...firstEx, ...details });
       } else {
         setSuggestedExercise(null);
       }
@@ -111,6 +114,26 @@ export function ExercisesListScreen(): React.ReactElement {
     setSuggestedExercise(null);
     setSessionFinished(false);
     loadData();
+  };
+
+  const handleSelectExercise = async (ex: Exercise) => {
+    setLoading(true);
+    try {
+      const code = ex.exerciseCode || String(ex.id);
+      const details = await ExerciseService.getExerciseDetailsFromServer(code);
+      setSuggestedExercise({ ...ex, ...details });
+      setShowHistoryOnly(false);
+      setSessionFinished(false);
+      setCountdown(null);
+    } catch (err) {
+      console.warn('Error selecting exercise:', err);
+      setSuggestedExercise(ex);
+      setShowHistoryOnly(false);
+      setSessionFinished(false);
+      setCountdown(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onRepeat = () => {
@@ -275,7 +298,7 @@ export function ExercisesListScreen(): React.ReactElement {
         {loading ? <ActivityIndicator size="large" color={colors.primary} /> : (
           filteredExercises.length === 0 ? <Text style={s.emptyHint}>No exercises found on server.</Text> :
           filteredExercises.map((ex, idx) => (
-            <TouchableOpacity key={`${ex.id}-${idx}`} style={s.exerciseCard} onPress={() => { setSuggestedExercise(ex); setShowHistoryOnly(false); setSessionFinished(false); }}>
+            <TouchableOpacity key={`${ex.id}-${idx}`} style={s.exerciseCard} onPress={() => handleSelectExercise(ex)}>
               <View style={s.cardLeft}>
                 <View style={s.iconBox}>
                   <CategoryIcon type={ex.exerciseType} size={22} color={colors.primary} />

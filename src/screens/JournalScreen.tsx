@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
 import {
   View,
   Text,
@@ -86,6 +88,75 @@ export function JournalScreen(): React.ReactElement {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
 
+  const navigation = useNavigation<any>();
+  const { email } = useAuth();
+  
+  // PIN states
+  const [pinSetupVisible, setPinSetupVisible] = useState(false);
+  const [setupPin, setSetupPin] = useState('');
+  const [setupPinConfirm, setSetupPinConfirm] = useState('');
+  const [setupStep, setSetupStep] = useState(1);
+  
+  const [pinUnlockVisible, setPinUnlockVisible] = useState(false);
+  const [unlockPin, setUnlockPin] = useState('');
+  const [unlockTargetEntry, setUnlockTargetEntry] = useState<JournalEntry | null>(null);
+  
+  const pinInputRef = useRef<TextInput>(null);
+
+  const getPinKey = (): string => {
+    const userEmail = email ? email.trim().toLowerCase() : '';
+    return `@mentora_journal_pin_${userEmail}`;
+  };
+
+  useEffect(() => {
+    if (pinSetupVisible || pinUnlockVisible) {
+      const timer = setTimeout(() => {
+        pinInputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [pinSetupVisible, pinUnlockVisible]);
+
+  const renderPinDigits = (pin: string) => {
+    const digits = [0, 1, 2, 3];
+    return (
+      <TouchableOpacity 
+        activeOpacity={1}
+        onPress={() => pinInputRef.current?.focus()}
+        style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 16, marginVertical: 20, justifyContent: 'center' }}
+      >
+        {digits.map((index) => {
+          const char = pin[index];
+          const hasValue = char !== undefined;
+          return (
+            <View
+              key={index}
+              style={{
+                width: 50,
+                height: 50,
+                borderRadius: 12,
+                borderWidth: 2,
+                borderColor: hasValue ? colors.primary : '#E2E8F0',
+                backgroundColor: hasValue ? '#EFF6FF' : '#FFFFFF',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+                elevation: 1,
+              }}
+            >
+              {hasValue ? (
+                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: colors.primary }} />
+              ) : null}
+            </View>
+          );
+        })}
+      </TouchableOpacity>
+    );
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -144,23 +215,40 @@ export function JournalScreen(): React.ReactElement {
     setMentoraModalVisible(false);
   };
 
-  const onLockedPress = (): void => {
+  const onLockedPress = async (): Promise<void> => {
     if (!lockedChecked && !lockedConfirmed) {
       setMentoraModalVisible(true);
       return;
     }
     if (lockedChecked) {
       setLockedChecked(false);
-      setLockedConfirmed(false);
     } else {
-      setLockedChecked(true);
+      const key = getPinKey();
+      const storedPin = await AsyncStorage.getItem(key);
+      if (!storedPin) {
+        setSetupPin('');
+        setSetupPinConfirm('');
+        setSetupStep(1);
+        setPinSetupVisible(true);
+      } else {
+        setLockedChecked(true);
+      }
     }
   };
 
-  const onMentoraOk = (): void => {
-    setLockedConfirmed(true);
-    setLockedChecked(true);
+  const onMentoraOk = async (): Promise<void> => {
     setMentoraModalVisible(false);
+    const key = getPinKey();
+    const storedPin = await AsyncStorage.getItem(key);
+    if (!storedPin) {
+      setSetupPin('');
+      setSetupPinConfirm('');
+      setSetupStep(1);
+      setPinSetupVisible(true);
+    } else {
+      setLockedConfirmed(true);
+      setLockedChecked(true);
+    }
   };
 
   const getFilterLabel = (id: string) => {
@@ -182,6 +270,48 @@ export function JournalScreen(): React.ReactElement {
     try {
       const payloadContent = newContent.trim() || newTitle.trim();
       
+      // Client-side crisis / safety risk check (matches ChatScreen safety filtering with Arabic support)
+      const lowerText = payloadContent.toLowerCase();
+      const riskPhrases = [
+        'suicide', 'kill myself', 'want to die', 'end my life', 'harm myself', 
+        'killmy self', 'end mylife', 'suicidal', 'better off dead',
+        'انتحر', 'أنتحر', 'انتحار', 'هموت نفسي', 'اموت نفسي', 'أموت نفسي', 
+        'اقتل نفسي', 'أقتل نفسي', 'انهي حياتي', 'أنهي حياتي', 'ايذاء نفسي', 
+        'إيذاء نفسي', 'اريد الموت', 'أريد الموت', 'الافضل ان اموت', 'الافضل أن أموت'
+      ];
+      const containsRisk = riskPhrases.some(phrase => lowerText.includes(phrase));
+      
+      if (containsRisk) {
+        setJournalCrisisVisible(true);
+        // Save locally without calling backend (safeguard)
+        const defaultTitle = language === 'ar' ? 'تنبيه سلامة' : 'Safety Alert';
+        const safetyTags = language === 'ar' ? ['أمان', 'دعم'] : ['Safety', 'Support'];
+        const defaultTitleText = newTitle.trim() || defaultTitle;
+        const newEntry: JournalEntry = {
+          id: Date.now().toString(),
+          title: defaultTitleText,
+          preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
+          fullContent: newContent.trim(),
+          date: new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit',
+          }),
+          tags: safetyTags,
+          type: 'text',
+          locked: lockedChecked,
+        };
+        setEntries((prev) => {
+          const updated = [newEntry, ...prev];
+          getJournalKey().then(key =>
+            AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.warn)
+          );
+          return updated;
+        });
+        setIsSaving(false);
+        closeWrite();
+        return;
+      }
+
       // Get the real token from the API
       const token = await getApiToken();
 
@@ -295,7 +425,17 @@ export function JournalScreen(): React.ReactElement {
   };
 
   const JournalEntryCard = ({ item }: { item: JournalEntry }) => {
-    const handlePress = () => {
+    const handlePress = async () => {
+      if (item.locked) {
+        const key = getPinKey();
+        const storedPin = await AsyncStorage.getItem(key);
+        if (storedPin) {
+          setUnlockTargetEntry(item);
+          setUnlockPin('');
+          setPinUnlockVisible(true);
+          return;
+        }
+      }
       setSelectedEntry(item);
     };
 
@@ -701,6 +841,197 @@ export function JournalScreen(): React.ReactElement {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* PIN Setup Modal */}
+      <Modal
+        visible={pinSetupVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setPinSetupVisible(false);
+          setSetupPin('');
+          setSetupPinConfirm('');
+          setSetupStep(1);
+          setLockedChecked(false);
+          setLockedConfirmed(false);
+        }}
+      >
+        <TouchableWithoutFeedback onPress={() => {
+          setPinSetupVisible(false);
+          setSetupPin('');
+          setSetupPinConfirm('');
+          setSetupStep(1);
+          setLockedChecked(false);
+          setLockedConfirmed(false);
+        }}>
+          <View style={styles.pinModalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.pinModalCard}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>
+                  {t.journal.setPinTitle}
+                </Text>
+                <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 10, lineHeight: 18 }}>
+                  {setupStep === 1 ? t.journal.setPinDesc : t.journal.enterPinDesc}
+                </Text>
+                
+                {renderPinDigits(setupStep === 1 ? setupPin : setupPinConfirm)}
+                
+                <TextInput
+                  ref={pinInputRef}
+                  style={{ position: 'absolute', left: -9999, top: -9999, opacity: 0 }}
+                  keyboardType="numeric"
+                  maxLength={4}
+                  value={setupStep === 1 ? setupPin : setupPinConfirm}
+                  onChangeText={(val) => {
+                    const cleanVal = val.replace(/[^0-9]/g, '');
+                    if (setupStep === 1) {
+                      setSetupPin(cleanVal);
+                      if (cleanVal.length === 4) {
+                        setSetupStep(2);
+                      }
+                    } else {
+                      setSetupPinConfirm(cleanVal);
+                      if (cleanVal.length === 4) {
+                        if (cleanVal === setupPin) {
+                          (async () => {
+                            const key = getPinKey();
+                            await AsyncStorage.setItem(key, setupPin);
+                            setLockedConfirmed(true);
+                            setLockedChecked(true);
+                            setPinSetupVisible(false);
+                            setSetupPin('');
+                            setSetupPinConfirm('');
+                            setSetupStep(1);
+                            Alert.alert(t.common.success, language === 'ar' ? 'تم تعيين رمز PIN لليوميات بنجاح.' : 'Journal PIN has been set successfully.');
+                          })();
+                        } else {
+                          Alert.alert(t.common.error, t.journal.pinMismatch);
+                          setSetupPinConfirm('');
+                        }
+                      }
+                    }
+                  }}
+                />
+                
+                <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 12, marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={styles.mentoraCancelBtn}
+                    onPress={() => {
+                      setPinSetupVisible(false);
+                      setSetupPin('');
+                      setSetupPinConfirm('');
+                      setSetupStep(1);
+                      setLockedChecked(false);
+                      setLockedConfirmed(false);
+                    }}
+                  >
+                    <Text style={styles.mentoraCancelText}>{t.common.cancel}</Text>
+                  </TouchableOpacity>
+                  {setupStep === 2 && (
+                    <TouchableOpacity
+                      style={[styles.mentoraCancelBtn, { backgroundColor: '#F1F5F9' }]}
+                      onPress={() => {
+                        setSetupPinConfirm('');
+                        setSetupStep(1);
+                      }}
+                    >
+                      <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>{t.common.back}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* PIN Unlock Modal */}
+      <Modal
+        visible={pinUnlockVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setPinUnlockVisible(false);
+          setUnlockPin('');
+          setUnlockTargetEntry(null);
+        }}
+      >
+        <TouchableWithoutFeedback onPress={() => {
+          setPinUnlockVisible(false);
+          setUnlockPin('');
+          setUnlockTargetEntry(null);
+        }}>
+          <View style={styles.pinModalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.pinModalCard}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }}>
+                  {t.journal.enterPinTitle}
+                </Text>
+                <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 10, lineHeight: 18 }}>
+                  {t.journal.enterPinDesc}
+                </Text>
+                
+                {renderPinDigits(unlockPin)}
+                
+                <TextInput
+                  ref={pinInputRef}
+                  style={{ position: 'absolute', left: -9999, top: -9999, opacity: 0 }}
+                  keyboardType="numeric"
+                  maxLength={4}
+                  value={unlockPin}
+                  onChangeText={(val) => {
+                    const cleanVal = val.replace(/[^0-9]/g, '');
+                    setUnlockPin(cleanVal);
+                    if (cleanVal.length === 4) {
+                      (async () => {
+                        const key = getPinKey();
+                        const storedPin = await AsyncStorage.getItem(key);
+                        if (cleanVal === storedPin) {
+                          setPinUnlockVisible(false);
+                          setUnlockPin('');
+                          if (unlockTargetEntry) {
+                            setSelectedEntry(unlockTargetEntry);
+                          }
+                        } else {
+                          Alert.alert(t.common.error, t.journal.incorrectPin);
+                          setUnlockPin('');
+                        }
+                      })();
+                    }
+                  }}
+                />
+                
+                <TouchableOpacity
+                  style={{ alignSelf: 'center', marginVertical: 8 }}
+                  onPress={() => {
+                    setPinUnlockVisible(false);
+                    setUnlockPin('');
+                    setUnlockTargetEntry(null);
+                    navigation.navigate('Profile', { screen: 'Settings' });
+                  }}
+                >
+                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14, textDecorationLine: 'underline' }}>
+                    {t.journal.forgotPin}
+                  </Text>
+                </TouchableOpacity>
+                
+                <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', gap: 12, marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={styles.mentoraCancelBtn}
+                    onPress={() => {
+                      setPinUnlockVisible(false);
+                      setUnlockPin('');
+                      setUnlockTargetEntry(null);
+                    }}
+                  >
+                    <Text style={styles.mentoraCancelText}>{t.common.cancel}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View >
   );

@@ -223,7 +223,9 @@ export function ChatScreen(): React.ReactElement {
     const lowerText = userMessageText.toLowerCase();
     const riskPhrases = [
       'suicide', 'kill myself', 'want to die', 'end my life', 'harm myself', 
-      'killmy self', 'end mylife', 'suicidal', 'better off dead'
+      'killmy self', 'end mylife', 'suicidal', 'better off dead',
+      'انتحر', 'أنتحر', 'هموت نفسي', 'اموت نفسي', 'اقتل نفسي', 'أقتل نفسي',
+      'انهي حياتي', 'أنهي حياتي', 'ايذاء نفسي', 'إيذاء نفسي'
     ];
     const containsRisk = riskPhrases.some(phrase => lowerText.includes(phrase));
 
@@ -476,8 +478,8 @@ export function ChatScreen(): React.ReactElement {
 
       <KeyboardAvoidingView
         style={s.keyboardAv}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -500,7 +502,7 @@ export function ChatScreen(): React.ReactElement {
         />
 
         {!isCrisis && (
-          <View style={[s.inputArea, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={[s.inputArea, { paddingBottom: 12 }]}>
             <View style={s.inputContainer}>
               <TextInput
                 style={s.textInput}
