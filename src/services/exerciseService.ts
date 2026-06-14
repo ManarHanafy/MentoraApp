@@ -381,7 +381,7 @@ export const ExerciseService = {
       const completed = await ExerciseService.getCompletedExercises();
       // Remove any existing entry with the same ID, then add to the front
       const filtered = completed.filter((c: Exercise) => c.id !== exercise.id);
-      const updated = [exercise, ...filtered];
+      const updated = [{ ...exercise, completedAt: Date.now() }, ...filtered];
       await AsyncStorage.setItem(key, JSON.stringify(updated));
     } catch (error) { console.error(error); }
   },

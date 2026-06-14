@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Dimensions } from 'react-native';
 import Svg, { Path, Circle, Rect, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography } from '../theme';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -13,6 +14,7 @@ interface ScreenProps {
 export function FirstLaunchOnboardingScreen({ onComplete }: ScreenProps): React.ReactElement {
   const [currentStep, setCurrentStep] = useState(0);
   const { language, isRTL } = useLanguage();
+  const insets = useSafeAreaInsets();
 
   const SCREENS = [
     {
@@ -160,7 +162,7 @@ export function FirstLaunchOnboardingScreen({ onComplete }: ScreenProps): React.
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
       {/* Top Header Row */}
       <View style={[styles.header, isRTL && { flexDirection: 'row-reverse' }]}>
         <Text style={styles.appName}>Mentora</Text>

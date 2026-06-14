@@ -214,11 +214,16 @@ export function DashboardScreen(): React.ReactElement {
 
       const completed = await ExerciseService.getCompletedExercises();
       setCompletedExercises(completed);
+
+      const userEmail = await AsyncStorage.getItem('@mentora_user_email');
+      const journalKey = userEmail ? `@mentora_journal_entries_${userEmail.trim().toLowerCase()}` : '@mentora_journal_entries';
+      const journalStored = await AsyncStorage.getItem(journalKey);
+      const journalEntries = journalStored ? JSON.parse(journalStored) : [];
       
       setStats(prev => ({
         ...prev,
         totalExercises: completed.length,
-        streak: calculateStreak(completed)
+        streak: calculateStreak(completed, journalEntries)
       }));
 
       // Roadmap progress: pending suggested + completed vs completed
@@ -262,10 +267,7 @@ export function DashboardScreen(): React.ReactElement {
         { label: 'Exercises', val: 0, color: colors.success }
       ]);
 
-      const email = await AsyncStorage.getItem('@mentora_user_email');
-      const journalKey = email ? `@mentora_journal_entries_${email.trim().toLowerCase()}` : '@mentora_journal_entries';
-      const journalStored = await AsyncStorage.getItem(journalKey);
-      let journalEntries = journalStored ? JSON.parse(journalStored) : [];
+      // journalEntries already loaded at the top of loadData
       
       // Fetch chat messages count
       let chatCount = 0;
@@ -316,23 +318,53 @@ export function DashboardScreen(): React.ReactElement {
         'Breathing': { completed: 0, target: 5, name: 'Deep Breathing Practice' },
         'CBT': { completed: 0, target: 3, name: 'CBT Daily Exercises' },
         'Mindfulness': { completed: 0, target: 3, name: 'Mindfulness Sessions' },
-        'Relaxation': { completed: 0, target: 4, name: 'Relaxation Practices' }
+        'Relaxation': { completed: 0, target: 4, name: 'Relaxation Practices' },
+        'Sleep': { completed: 0, target: 3, name: 'Sleep & Restorative Habits' },
+        'Behavioral': { completed: 0, target: 3, name: 'Behavioral Activation' },
+        'Social': { completed: 0, target: 3, name: 'Social Connection' },
+        'Safety': { completed: 0, target: 3, name: 'Safety Planning' }
       };
 
       completed.forEach(ex => {
         const type = ex.exerciseType || 'General';
-        if (goalMap[type]) {
-          goalMap[type].completed += 1;
+        let matchedKey = type;
+        const lowerType = type.toLowerCase();
+        
+        if (lowerType.includes('breath')) {
+          matchedKey = 'Breathing';
+        } else if (lowerType.includes('cbt') || lowerType.includes('cognitive') || lowerType.includes('thought') || lowerType.includes('restructuring')) {
+          matchedKey = 'CBT';
+        } else if (lowerType.includes('mindful') || lowerType.includes('gratitude')) {
+          matchedKey = 'Mindfulness';
+        } else if (lowerType.includes('relax') || lowerType.includes('stress') || lowerType.includes('anxiety')) {
+          matchedKey = 'Relaxation';
+        } else if (lowerType.includes('sleep') || lowerType.includes('restorative')) {
+          matchedKey = 'Sleep';
+        } else if (lowerType.includes('behavioral') || lowerType.includes('behavioural') || lowerType.includes('activat')) {
+          matchedKey = 'Behavioral';
+        } else if (lowerType.includes('social') || lowerType.includes('connect')) {
+          matchedKey = 'Social';
+        } else if (lowerType.includes('safety') || lowerType.includes('safe')) {
+          matchedKey = 'Safety';
+        }
+
+        if (goalMap[matchedKey]) {
+          goalMap[matchedKey].completed += 1;
         }
       });
 
-      const goals = Object.entries(goalMap).map(([type, value]) => ({
-        type,
-        name: value.name,
-        completed: value.completed,
-        target: value.target,
-        percentage: Math.min(Math.round((value.completed / value.target) * 100), 100)
-      }));
+      const goals = Object.entries(goalMap)
+        .map(([type, value]) => ({
+          type,
+          name: value.name,
+          completed: value.completed,
+          target: value.target,
+          percentage: Math.min(Math.round((value.completed / value.target) * 100), 100)
+        }))
+        .filter(goal => {
+          const defaultGoals = ['Breathing', 'CBT', 'Mindfulness', 'Relaxation'];
+          return defaultGoals.includes(goal.type) || goal.completed > 0;
+        });
 
       setGoalsList(goals);
 
@@ -343,10 +375,63 @@ export function DashboardScreen(): React.ReactElement {
     }
   };
 
-  const calculateStreak = (completed: any[]) => {
-    if (completed.length === 0) return 0;
-    const days = new Set(completed.map(ex => new Date(ex.completedAt || Date.now()).toDateString()));
-    return Math.min(days.size, 7);
+  const calculateStreak = (completed: any[], journals: any[]) => {
+    const datesList: string[] = [];
+    
+    (completed || []).forEach(ex => {
+      if (ex.completedAt) {
+        datesList.push(new Date(ex.completedAt).toDateString());
+      }
+    });
+    
+    (journals || []).forEach(entry => {
+      if (entry.createdAt) {
+        datesList.push(new Date(entry.createdAt).toDateString());
+      } else if (entry.date) {
+        datesList.push(new Date(entry.date).toDateString());
+      }
+    });
+
+    const uniqueDates = Array.from(new Set(datesList)).map(d => new Date(d));
+    if (uniqueDates.length === 0) return 0;
+    
+    // Sort dates descending (newest first)
+    uniqueDates.sort((a, b) => b.getTime() - a.getTime());
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+
+    let current = uniqueDates[0];
+    current.setHours(0, 0, 0, 0);
+
+    // If latest activity is not today or yesterday, streak is broken
+    if (current.getTime() !== today.getTime() && current.getTime() !== yesterday.getTime()) {
+      return 0;
+    }
+
+    let streak = 1;
+    for (let i = 1; i < uniqueDates.length; i++) {
+      const prevDate = new Date(uniqueDates[i]);
+      prevDate.setHours(0, 0, 0, 0);
+      
+      const expectedDate = new Date(current);
+      expectedDate.setDate(expectedDate.getDate() - 1);
+      expectedDate.setHours(0, 0, 0, 0);
+
+      if (prevDate.getTime() === expectedDate.getTime()) {
+        streak++;
+        current = prevDate;
+      } else if (prevDate.getTime() < expectedDate.getTime()) {
+        // Gap found, streak ends
+        break;
+      }
+    }
+    
+    return streak;
   };
 
   const translateType = (type: string) => {
@@ -499,7 +584,7 @@ export function DashboardScreen(): React.ReactElement {
                 </View>
                 <View style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 }}>
                   <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, isRTL && { flexDirection: 'row-reverse' }]}>
-                    <View style={[isRTL && { alignItems: 'flex-end' }]}>
+                    <View style={[{ flex: 1 }, isRTL ? { alignItems: 'flex-end', marginLeft: 8 } : { marginRight: 8 }]}>
                       <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A' }}>{item.name}</Text>
                       <Text style={{ fontSize: 12, color: '#64748B', marginTop: 1 }}>{item.feedback}</Text>
                     </View>
@@ -607,7 +692,9 @@ export function DashboardScreen(): React.ReactElement {
             </View>
             <View style={{ flex: 1 }}>
               <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, isRTL && { flexDirection: 'row-reverse' }]}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A' }}>{translateTag(item.tag)}</Text>
+                <View style={[{ flex: 1 }, isRTL ? { alignItems: 'flex-end', marginLeft: 8 } : { marginRight: 8 }]}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#0F172A' }}>{translateTag(item.tag)}</Text>
+                </View>
                 <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748B' }}>{item.percentage}%</Text>
               </View>
               <Text style={[{ fontSize: 12, color: '#64748B', marginBottom: 8 }, isRTL && { textAlign: 'right' }]}>
@@ -681,12 +768,27 @@ export function DashboardScreen(): React.ReactElement {
           const transGoalName = (name: string) => {
             if (language !== 'ar') return name;
             const m: Record<string, string> = {
+              'Deep Breathing Practice': 'جلسات تنشن عميق',
+              'CBT Daily Exercises': 'تمارين العلاج السلوكي المعرفي اليومية',
+              'Mindfulness Sessions': 'جلسات اليقظة الذهنية',
+              'Relaxation Practices': 'تمارين الاسترخاء',
+              'Sleep & Restorative Habits': 'عادات النوم والاسترخاء',
+              'Behavioral Activation': 'تنشيط سلوكي ومقاومة الخمول',
+              'Social Connection': 'التواصل الاجتماعي',
+              'Safety Planning': 'خطط الأمان النفسي'
+            };
+            // Map specifically 'Deep Breathing Practice' translation correctly
+            const cleanMap: Record<string, string> = {
               'Deep Breathing Practice': 'جلسات تنفس عميق',
               'CBT Daily Exercises': 'تمارين العلاج السلوكي المعرفي اليومية',
               'Mindfulness Sessions': 'جلسات اليقظة الذهنية',
-              'Relaxation Practices': 'تمارين الاسترخاء'
+              'Relaxation Practices': 'تمارين الاسترخاء',
+              'Sleep & Restorative Habits': 'عادات النوم والاسترخاء',
+              'Behavioral Activation': 'تنشيط سلوكي ومقاومة الخمول',
+              'Social Connection': 'التواصل الاجتماعي',
+              'Safety Planning': 'خطط الأمان النفسي'
             };
-            return m[name] || name;
+            return cleanMap[name] || name;
           };
 
           return (
@@ -728,9 +830,9 @@ export function DashboardScreen(): React.ReactElement {
 
         <View style={[s.row, { marginTop: 10 }, isRTL && { flexDirection: 'row-reverse' }]}>
           <View style={[s.card, { backgroundColor: '#F1F5F9' }]}>
-            <Text style={[s.cardTitle, isRTL && { textAlign: 'right' }]}>{language === 'ar' ? 'الأهداف المكتملة' : 'Goals Completed'}</Text>
-            <Text style={[s.cardValue, isRTL && { textAlign: 'right' }]}>{goalsCompleted}</Text>
-            <Text style={[s.cardSubValue, isRTL && { textAlign: 'right' }]}>{language === 'ar' ? 'هذه الدورة' : 'This cycle'}</Text>
+            <Text style={[s.cardTitle, isRTL && { textAlign: 'right' }]}>{language === 'ar' ? 'التمارين المنجزة' : 'Exercises Completed'}</Text>
+            <Text style={[s.cardValue, isRTL && { textAlign: 'right' }]}>{completedExercises.length}</Text>
+            <Text style={[s.cardSubValue, isRTL && { textAlign: 'right' }]}>{language === 'ar' ? 'إجمالي التمارين' : 'Total completed'}</Text>
           </View>
           <View style={[s.card, { backgroundColor: '#F1F5F9' }]}>
             <Text style={[s.cardTitle, isRTL && { textAlign: 'right' }]}>{language === 'ar' ? 'السلسلة الحالية' : 'Current Streak'}</Text>

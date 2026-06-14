@@ -405,7 +405,6 @@ export function HomeScreen(): React.ReactElement {
           )}
         </TouchableOpacity>
       </View>
-
       {/* --- Notifications Modal --- */}
       <Modal visible={showNotifications} animationType="slide" transparent={true}>
          <View style={styles.modalOverlay}>
@@ -429,260 +428,164 @@ export function HomeScreen(): React.ReactElement {
                   const completionPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                   const currentSuggested = activeSuggested.length > 0 ? activeSuggested[0] : null;
 
-                  const getCategoryLabel = (category: string) => {
-                     if (language === 'ar') {
-                        switch(category) {
-                           case 'exercise_reminder': return 'تذكير بالتمارين';
-                           case 'completed': return 'تمرين مكتمل';
-                           case 'new_unlocked': return 'فتح تمرين جديد';
-                           case 'journal_reminder': return 'تذكير التدوين';
-                           case 'progress': return 'تحديث التقدم';
-                           case 'streak': return 'إنجاز التتبع';
-                           case 'inactive_resume': return 'استئناف المسار';
-                           default: return 'تنبيه';
-                        }
-                     } else {
-                        switch(category) {
-                           case 'exercise_reminder': return 'Exercise Reminder';
-                           case 'completed': return 'Exercise Completed';
-                           case 'new_unlocked': return 'New Exercise Unlocked';
-                           case 'journal_reminder': return 'Journal Reminder';
-                           case 'progress': return 'Progress Update';
-                           case 'streak': return 'Streak Achievement';
-                           case 'inactive_resume': return 'Resume Journey';
-                           default: return 'Notification';
-                        }
-                     }
-                  };
-
-                  const getCategoryIcon = (category: string) => {
-                     let bgColor = '#EFF6FF';
-                     let strokeColor = '#3B82F6';
-                     let icon: React.ReactNode;
-
-                     if (category === 'exercise_reminder') {
-                        bgColor = '#FEF3C7';
-                        strokeColor = '#D97706';
-                        icon = (
-                           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                              <Circle cx="12" cy="12" r="10" stroke={strokeColor} strokeWidth={2} />
-                              <Path d="M12 6v6l4 2" stroke={strokeColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                           </Svg>
-                        );
-                     } else if (category === 'completed') {
-                        bgColor = '#DCFCE7';
-                        strokeColor = '#15803D';
-                        icon = (
-                           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                              <Path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke={strokeColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                              <Path d="M22 4L12 14.01l-3-3" stroke={strokeColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                           </Svg>
-                        );
-                     } else if (category === 'new_unlocked') {
-                        bgColor = '#F5F3FF';
-                        strokeColor = '#7C3AED';
-                        icon = (
-                           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                              <Rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke={strokeColor} strokeWidth={2} />
-                              <Path d="M7 11V7a5 5 0 0 1 9.9-1" stroke={strokeColor} strokeWidth={2} strokeLinecap="round" />
-                           </Svg>
-                        );
-                     } else if (category === 'journal_reminder') {
-                        bgColor = '#FFFBEB';
-                        strokeColor = '#D97706';
-                        icon = <JournalIcon color={strokeColor} size={18} focused={true} />;
-                     } else if (category === 'streak') {
-                        bgColor = '#FEE2E2';
-                        strokeColor = '#EF4444';
-                        icon = <FireIcon color={strokeColor} size={18} />;
-                     } else if (category === 'progress') {
-                        bgColor = '#E0F2FE';
-                        strokeColor = '#0284C7';
-                        icon = <InsightsIcon color={strokeColor} size={18} />;
-                     } else if (category === 'inactive_resume') {
-                        bgColor = '#F1F5F9';
-                        strokeColor = '#475569';
-                        icon = <BrainIcon color={strokeColor} size={18} />;
-                     } else {
-                        bgColor = '#F1F5F9';
-                        strokeColor = '#475569';
-                        icon = <BrainIcon color={strokeColor} size={18} />;
-                     }
-
-                     return { bgColor, strokeColor, icon };
-                  };
-
-                  // Generate notifications dynamically
-                  const notificationsList: any[] = [];
+                  // Build combined timeline items
+                  const timelineItems: any[] = [];
                   
-                  // 1. Suggested Exercises as Reminders
-                  pendingQueue.forEach((item, idx) => {
-                     notificationsList.push({
-                        id: `queue-${item.queueId || item.id || idx}`,
-                        category: 'exercise_reminder',
+                  // Incomplete suggested exercises
+                  activeSuggested.forEach((item, idx) => {
+                     timelineItems.push({
+                        id: `suggested-${item.id || idx}`,
+                        exercise: item,
+                        isCompleted: false,
                         title: item.name,
-                        body: language === 'ar' 
-                           ? `تمرين مقترح من الذكاء الاصطناعي: ${item.description || 'تمرين مخصص لك'}`
-                           : `AI Suggested Exercise: ${item.description || 'A personalized exercise for you.'}`,
+                        durationMinutes: item.durationMinutes || 5,
+                        body: item.description || (language === 'ar' ? 'تمرين مقترح مخصص لك بناءً على حالتك النفسية.' : 'A suggested exercise tailored to your psychological state.'),
                         timeGroup: 'today',
                         timeText: language === 'ar' ? 'الآن' : 'Just now',
-                        actionText: language === 'ar' ? 'ابدأ التمرين' : 'Start Exercise',
-                        onPress: () => {
-                           setShowNotifications(false);
-                           (navigation as any).navigate('Exercises', { openSuggested: true, exerciseToStart: item });
-                        }
                      });
                   });
 
-                  // 2. Completed Exercises
-                  recentHistory.slice(0, 5).forEach((ex, idx) => {
-                     notificationsList.push({
-                        id: `completed-${ex.id || idx}`,
-                        category: 'completed',
-                        title: ex.name,
-                        body: language === 'ar'
-                           ? `عمل رائع! لقد أكملت هذا التمرين بنجاح.`
-                           : `Great job! You successfully completed this exercise.`,
-                        timeGroup: idx === 0 ? 'today' : 'yesterday',
-                        timeText: idx === 0 
-                           ? (language === 'ar' ? 'اليوم' : 'Today') 
-                           : (language === 'ar' ? 'أمس' : 'Yesterday'),
-                        actionText: language === 'ar' ? 'عرض خارطة الطريق' : 'View Roadmap',
-                        onPress: () => {
-                           setShowNotifications(false);
-                           (navigation as any).navigate('Exercises', { openRoadmap: true });
-                        }
-                     });
-                  });
+                  // Group items
+                  const todayItems = timelineItems.filter(item => item.timeGroup === 'today');
+                  const yesterdayItems = timelineItems.filter(item => item.timeGroup === 'yesterday');
+                  const thisWeekItems = timelineItems.filter(item => item.timeGroup === 'this_week');
 
-                  // 3. Daily reminder if queue is empty
-                  if (pendingQueue.length === 0) {
-                     notificationsList.push({
-                        id: 'notif-daily-reminder',
-                        category: 'exercise_reminder',
-                        title: language === 'ar' ? 'تذكير بالتمارين اليومية' : 'Daily Exercise Reminder',
-                        body: language === 'ar' ? 'ابدأ محادثة أو سجل تدوينة للحصول على تمارين مخصصة.' : 'Start a chat or write a journal entry to receive personalized wellness exercises.',
-                        timeGroup: 'today',
-                        timeText: language === 'ar' ? 'منذ ١٠ دقائق' : '10 min ago',
-                        actionText: language === 'ar' ? 'افتح المحادثة' : 'Open Chat',
-                        onPress: () => {
-                           setShowNotifications(false);
-                           (navigation as any).navigate('Main', { screen: 'Chat' });
-                        }
-                     });
-                  }
-
-                  // 4. Streak achievements (dynamic)
-                  if (recentHistory.length >= 1) {
-                     notificationsList.push({
-                        id: 'notif-streak',
-                        category: 'streak',
-                        title: language === 'ar' ? 'إنجاز التتبع اليومي!' : 'Streak Achievement!',
-                        body: language === 'ar' ? 'مبروك! لقد حافظت على تتبع صحي ونشاط مستمر.' : 'Congratulations! You kept a wellness streak and stayed active.',
-                        timeGroup: 'this_week',
-                        timeText: language === 'ar' ? 'هذا الأسبوع' : 'This Week',
-                        actionText: language === 'ar' ? 'عرض التقدم' : 'View Progress',
-                        onPress: () => {
-                           setShowNotifications(false);
-                           (navigation as any).navigate('Main', { screen: 'Insights' });
-                        }
-                     });
-                  }
-
-                  // 5. Weekly Progress summary (dynamic)
-                  if (recentHistory.length > 0) {
-                     notificationsList.push({
-                        id: 'notif-progress',
-                        category: 'progress',
-                        title: language === 'ar' ? 'تحديث التقدم الأسبوعي' : 'Weekly Progress Update',
-                        body: language === 'ar' 
-                           ? `لقد أكملت ${recentHistory.length} تمارين هذا الأسبوع. استمر في هذا الأداء الرائع!`
-                           : `You have completed ${recentHistory.length} exercises this week. Keep up the excellent work!`,
-                        timeGroup: 'this_week',
-                        timeText: language === 'ar' ? 'هذا الأسبوع' : 'This Week',
-                        actionText: language === 'ar' ? 'عرض التقدم' : 'View Progress',
-                        onPress: () => {
-                           setShowNotifications(false);
-                           (navigation as any).navigate('Main', { screen: 'Insights' });
-                        }
-                     });
-                  }
-
-                  const todayNotifs = notificationsList.filter(n => n.timeGroup === 'today');
-                  const yesterdayNotifs = notificationsList.filter(n => n.timeGroup === 'yesterday');
-                  const thisWeekNotifs = notificationsList.filter(n => n.timeGroup === 'this_week');
-
-                  const renderNotificationItem = (item: any) => {
-                     const { bgColor, strokeColor, icon } = getCategoryIcon(item.category);
+                  const renderTimelineGroup = (groupTitle: string, items: any[]) => {
+                     if (items.length === 0) return null;
                      return (
-                        <View key={item.id} style={{
-                           backgroundColor: '#FFFFFF',
-                           borderRadius: 16,
-                           padding: 14,
-                           marginBottom: 12,
-                           borderWidth: 1,
-                           borderColor: '#F1F5F9',
-                           shadowColor: '#000',
-                           shadowOffset: { width: 0, height: 1 },
-                           shadowOpacity: 0.02,
-                           shadowRadius: 4,
-                           elevation: 1
-                        }}>
-                           <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
-                              <View style={[
-                                 {
-                                    width: 40,
-                                    height: 40,
-                                    borderRadius: 20,
-                                    backgroundColor: bgColor,
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    borderWidth: 1,
-                                    borderColor: '#E2E8F0'
-                                 },
-                                 isRTL ? { marginLeft: 12 } : { marginRight: 12 }
-                              ]}>
-                                 {icon}
-                              </View>
-                              <View style={{ flex: 1, alignItems: isRTL ? 'flex-end' : 'flex-start' }}>
-                                 <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', marginBottom: 2 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: '800', color: strokeColor, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                       {getCategoryLabel(item.category)}
-                                    </Text>
-                                 </View>
-                                 <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', justifyContent: 'space-between', width: '100%', alignItems: 'baseline', marginBottom: 4 }}>
-                                    <Text style={{ fontWeight: '700', fontSize: 13, color: '#1E293B', flex: 1, textAlign: isRTL ? 'right' : 'left' }}>
-                                       {item.title}
-                                    </Text>
-                                    <Text style={{ color: '#94A3B8', fontSize: 9, fontWeight: '500' }}>
-                                       {item.timeText}
-                                    </Text>
-                                 </View>
-                                 <Text style={{ color: '#64748B', fontSize: 11, lineHeight: 16, textAlign: isRTL ? 'right' : 'left', marginBottom: 10 }}>
-                                    {item.body}
-                                 </Text>
+                        <View style={{ marginBottom: 20 }}>
+                           <Text style={{ fontSize: 13, fontWeight: '800', color: '#64748B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: isRTL ? 'right' : 'left' }}>
+                              {groupTitle}
+                           </Text>
+                           {items.map((item, idx) => {
+                              const isLast = idx === items.length - 1;
+                              const isFirstIncomplete = !item.isCompleted && activeSuggested.length > 0 && activeSuggested[0].id === item.exercise.id;
+                              
+                              return (
+                                 <View key={item.id} style={[{ flexDirection: 'row', minHeight: 90 }, isRTL && { flexDirection: 'row-reverse' }]}>
+                                    {/* Timeline Node Column */}
+                                    <View style={[{ alignItems: 'center' }, isRTL ? { marginLeft: 16 } : { marginRight: 16 }]}>
+                                       {/* Circle node */}
+                                       <View style={{
+                                          width: 24,
+                                          height: 24,
+                                          borderRadius: 12,
+                                          backgroundColor: item.isCompleted ? '#10B981' : (isFirstIncomplete ? colors.primary : '#E2E8F0'),
+                                          borderWidth: isFirstIncomplete ? 4 : 0,
+                                          borderColor: isFirstIncomplete ? '#DBEAFE' : 'transparent',
+                                          justifyContent: 'center',
+                                          alignItems: 'center',
+                                          zIndex: 2
+                                       }}>
+                                          {item.isCompleted ? (
+                                             <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' }}>✓</Text>
+                                          ) : (
+                                             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isFirstIncomplete ? '#FFFFFF' : '#94A3B8' }} />
+                                          )}
+                                       </View>
+                                       
+                                       {/* Vertical line connecting nodes */}
+                                       {!isLast && (
+                                          <View style={{
+                                             width: 2,
+                                             flex: 1,
+                                             backgroundColor: item.isCompleted ? '#10B981' : '#E2E8F0',
+                                             marginVertical: 4
+                                          }} />
+                                       )}
+                                    </View>
 
-                                 {/* Action button */}
-                                 <TouchableOpacity
-                                    style={{
-                                       backgroundColor: colors.primary,
-                                       paddingHorizontal: 12,
-                                       paddingVertical: 6,
-                                       borderRadius: 8,
-                                       alignSelf: isRTL ? 'flex-start' : 'flex-end',
-                                       flexDirection: isRTL ? 'row-reverse' : 'row',
-                                       alignItems: 'center',
-                                       gap: 4
-                                    }}
-                                    onPress={item.onPress}
-                                 >
-                                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                                       {item.actionText}
-                                    </Text>
-                                    <ArrowRightIcon color="#FFFFFF" size={10} />
-                                 </TouchableOpacity>
-                              </View>
-                           </View>
+                                    {/* Content Box */}
+                                    <View style={{ flex: 1, paddingBottom: 20 }}>
+                                       <View style={{
+                                          backgroundColor: '#FFFFFF',
+                                          borderRadius: 16,
+                                          padding: 14,
+                                          borderWidth: 1,
+                                          borderColor: item.isCompleted ? '#D1FAE5' : (isFirstIncomplete ? colors.primary : '#E2E8F0'),
+                                          shadowColor: '#000',
+                                          shadowOffset: { width: 0, height: 1 },
+                                          shadowOpacity: isFirstIncomplete ? 0.04 : 0.01,
+                                          shadowRadius: 4,
+                                          elevation: 1
+                                       }}>
+                                          {/* Badge & Time Text Header Row */}
+                                          <View style={[{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, isRTL && { flexDirection: 'row-reverse' }]}>
+                                             <Text style={{
+                                                fontSize: 9,
+                                                fontWeight: '800',
+                                                color: item.isCompleted ? '#10B981' : (isFirstIncomplete ? '#D97706' : '#64748B'),
+                                                textTransform: 'uppercase',
+                                                letterSpacing: 0.5
+                                             }}>
+                                                {item.isCompleted 
+                                                   ? (language === 'ar' ? 'تمرين مكتمل' : 'COMPLETED EXERCISE')
+                                                   : (language === 'ar' ? 'تذكير بالتمرين' : 'EXERCISE REMINDER')}
+                                             </Text>
+                                             <Text style={{ color: '#94A3B8', fontSize: 9, fontWeight: '500' }}>
+                                                {item.timeText}
+                                             </Text>
+                                          </View>
+
+                                          {/* Exercise Title Row */}
+                                          <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 6 }, isRTL && { flexDirection: 'row-reverse' }]}>
+                                             <Text style={{
+                                                fontWeight: '700',
+                                                fontSize: 14,
+                                                color: '#1E293B',
+                                                textAlign: isRTL ? 'right' : 'left'
+                                             }}>
+                                                {item.title}
+                                             </Text>
+                                             {item.isCompleted ? (
+                                                <Text style={{ color: '#10B981', fontSize: 13, fontWeight: 'bold' }}>✓</Text>
+                                             ) : (
+                                                <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '500' }}>
+                                                   ({item.durationMinutes} {language === 'ar' ? 'دقائق' : 'min'})
+                                                </Text>
+                                             )}
+                                          </View>
+
+                                          {/* Exercise Description */}
+                                          <Text style={{
+                                             color: '#64748B',
+                                             fontSize: 11,
+                                             lineHeight: 16,
+                                             textAlign: isRTL ? 'right' : 'left',
+                                             marginBottom: item.isCompleted ? 0 : 12
+                                          }}>
+                                             {item.body}
+                                          </Text>
+
+                                          {/* Start Exercise Button (Only if incomplete) */}
+                                          {!item.isCompleted && (
+                                             <TouchableOpacity
+                                                style={{
+                                                   backgroundColor: colors.primary,
+                                                   paddingHorizontal: 12,
+                                                   paddingVertical: 8,
+                                                   borderRadius: 8,
+                                                   alignSelf: isRTL ? 'flex-start' : 'flex-end',
+                                                   flexDirection: isRTL ? 'row-reverse' : 'row',
+                                                   alignItems: 'center',
+                                                   gap: 4
+                                                }}
+                                                onPress={() => {
+                                                   setShowNotifications(false);
+                                                   (navigation as any).navigate('Exercises', { openSuggested: true, exerciseToStart: item.exercise });
+                                                }}
+                                             >
+                                                <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                                                   {language === 'ar' ? 'ابدأ التمرين' : 'Start Exercise'}
+                                                </Text>
+                                                <ArrowRightIcon color="#FFFFFF" size={10} />
+                                             </TouchableOpacity>
+                                          )}
+                                       </View>
+                                    </View>
+                                 </View>
+                              );
+                           })}
                         </View>
                      );
                   };
@@ -749,48 +652,24 @@ export function HomeScreen(): React.ReactElement {
                            </View>
                         </View>
 
-                        {notificationsList.length === 0 ? (
+                        {timelineItems.length === 0 ? (
                            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
                               <BellIcon size={48} color="#94A3B8" />
                               <Text style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', marginTop: 12, marginBottom: 4 }}>
-                                 {language === 'ar' ? 'لا توجد إشعارات جديدة' : 'No New Notifications'}
+                                 {language === 'ar' ? 'لا توجد تنبيهات جديدة' : 'No New Notifications'}
                               </Text>
                               <Text style={{ fontSize: 12, color: '#64748B', textAlign: 'center', paddingHorizontal: 20 }}>
-                                 {language === 'ar' ? 'سوف تظهر التذكيرات والأنشطة وتوصيات الذكاء الاصطناعي هنا.' : 'Your daily reminders, updates, and AI recommendations will appear here.'}
+                                 {language === 'ar' 
+                                    ? 'سوف تظهر التنبيهات والتمارين المقترحة هنا.'
+                                    : 'Your notifications and suggested exercises will appear here.'}
                               </Text>
                            </View>
                         ) : (
-                           <>
-                              {/* TODAY SECTION */}
-                              {todayNotifs.length > 0 && (
-                                 <View style={{ marginBottom: 16 }}>
-                                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: isRTL ? 'right' : 'left' }}>
-                                       {language === 'ar' ? 'اليوم' : 'Today'}
-                                    </Text>
-                                    {todayNotifs.map(renderNotificationItem)}
-                                 </View>
-                              )}
-
-                              {/* YESTERDAY SECTION */}
-                              {yesterdayNotifs.length > 0 && (
-                                 <View style={{ marginBottom: 16 }}>
-                                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: isRTL ? 'right' : 'left' }}>
-                                       {language === 'ar' ? 'أمس' : 'Yesterday'}
-                                    </Text>
-                                    {yesterdayNotifs.map(renderNotificationItem)}
-                                 </View>
-                              )}
-
-                              {/* THIS WEEK SECTION */}
-                              {thisWeekNotifs.length > 0 && (
-                                 <View style={{ marginBottom: 16 }}>
-                                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: isRTL ? 'right' : 'left' }}>
-                                       {language === 'ar' ? 'هذا الأسبوع' : 'This Week'}
-                                    </Text>
-                                    {thisWeekNotifs.map(renderNotificationItem)}
-                                 </View>
-                              )}
-                           </>
+                           <View style={{ paddingHorizontal: 4, marginTop: 8 }}>
+                              {renderTimelineGroup(language === 'ar' ? 'اليوم' : 'Today', todayItems)}
+                              {renderTimelineGroup(language === 'ar' ? 'أمس' : 'Yesterday', yesterdayItems)}
+                              {renderTimelineGroup(language === 'ar' ? 'هذا الأسبوع' : 'This Week', thisWeekItems)}
+                           </View>
                         )}
                      </ScrollView>
                   );

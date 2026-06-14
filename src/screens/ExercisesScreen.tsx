@@ -1433,6 +1433,28 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
 
             {/* Stages / Phases timeline */}
             {(() => {
+              // Helper: format a timestamp as a human-readable day label
+              const formatDayLabel = (ts?: string | number): string => {
+                if (!ts) return '';
+                const date = new Date(typeof ts === 'string' ? ts : Number(ts));
+                if (isNaN(date.getTime())) return '';
+                const now = new Date();
+                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+                const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                if (dayStart.getTime() === todayStart.getTime()) {
+                  return language === 'ar' ? 'اليوم' : 'Today';
+                } else if (dayStart.getTime() === yesterdayStart.getTime()) {
+                  return language === 'ar' ? 'أمس' : 'Yesterday';
+                } else {
+                  return date.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                  });
+                }
+              };
+
               const dynamicPhases = [];
               
               if (history.length > 0) {
@@ -1502,36 +1524,37 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                   <View style={{ paddingLeft: 8 }}>
                     {phase.exercises.map((ex, itemIdx) => {
                       const isCompleted = phase.phaseId === 'completed_milestones';
-                      const isActive = phase.phaseId === 'active_recommendations' && itemIdx === 0;
-                      const isLocked = phase.phaseId === 'active_recommendations' && itemIdx > 0;
+                      // All active suggested exercises are interactive (no locked state)
+                      const isActive = phase.phaseId === 'active_recommendations';
+                      const isFirstActive = isActive && itemIdx === 0;
 
                       const name = ex.name || 'AI Suggested Exercise';
                       const duration = ex.durationMinutes || 5;
                       const type = ex.exerciseType || 'General';
 
+                      const dayLabel = isCompleted
+                        ? formatDayLabel((ex as any).completedAt)
+                        : formatDayLabel((ex as any).suggestedAt);
+
                       return (
-                        <View key={`${ex.id}-${itemIdx}`} style={[{ flexDirection: 'row', minHeight: 80 }, isRTL && { flexDirection: 'row-reverse' }]}>
+                        <View key={`${ex.id}-${itemIdx}`} style={[{ flexDirection: 'row', minHeight: 100 }, isRTL && { flexDirection: 'row-reverse' }]}>
                           {/* Timeline Left Line Column */}
                           <View style={[{ alignItems: 'center' }, isRTL ? { marginLeft: 16 } : { marginRight: 16 }]}>
                             <View style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: 12,
-                              backgroundColor: isCompleted ? '#10B981' : (isActive ? '#3B82F6' : '#E2E8F0'),
-                              borderWidth: isActive ? 4 : 0,
-                              borderColor: isActive ? '#DBEAFE' : 'transparent',
+                              width: 26,
+                              height: 26,
+                              borderRadius: 13,
+                              backgroundColor: isCompleted ? '#10B981' : (isFirstActive ? '#3B82F6' : '#93C5FD'),
+                              borderWidth: isFirstActive ? 4 : (isActive ? 2 : 0),
+                              borderColor: isFirstActive ? '#DBEAFE' : (isActive ? '#BFDBFE' : 'transparent'),
                               justifyContent: 'center',
                               alignItems: 'center',
                               zIndex: 2
                             }}>
                               {isCompleted ? (
-                                <CheckCircleSolidIcon size={14} color="#FFFFFF" />
+                                <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' }}>✓</Text>
                               ) : (
-                                isLocked ? (
-                                  <LockIcon size={10} color="#94A3B8" />
-                                ) : (
-                                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' }} />
-                                )
+                                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#FFFFFF' }} />
                               )}
                             </View>
                             {/* Line connecting nodes */}
@@ -1539,7 +1562,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                               <View style={{
                                 width: 2,
                                 flex: 1,
-                                backgroundColor: isCompleted ? '#10B981' : '#E2E8F0',
+                                backgroundColor: isCompleted ? '#10B981' : '#BFDBFE',
                                 marginVertical: 4
                               }} />
                             )}
@@ -1548,75 +1571,125 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                           {/* Exercise Card Body */}
                           <View style={{ flex: 1, paddingBottom: 16 }}>
                             <TouchableOpacity
-                              activeOpacity={isLocked ? 1 : 0.7}
+                              activeOpacity={0.7}
                               onPress={() => {
-                                if (!isLocked) {
-                                  setShowRoadmapModal(false);
-                                  handleSelectExercise(ex);
-                                }
+                                setShowRoadmapModal(false);
+                                handleSelectExercise(ex);
                               }}
                               style={[{
                                 backgroundColor: '#FFFFFF',
-                                borderRadius: 14,
+                                borderRadius: 16,
                                 padding: 14,
-                                borderWidth: 1,
-                                borderColor: isActive ? '#3B82F6' : '#E2E8F0',
-                                flexDirection: 'row',
-                                alignItems: 'center',
+                                borderWidth: 1.5,
+                                borderColor: isCompleted ? '#D1FAE5' : (isFirstActive ? '#3B82F6' : '#BFDBFE'),
                                 shadowColor: '#000',
                                 shadowOffset: { width: 0, height: 1 },
-                                shadowOpacity: 0.02,
-                                shadowRadius: 4,
-                                elevation: 1,
-                                opacity: isLocked ? 0.6 : 1
-                              }, isRTL && { flexDirection: 'row-reverse' }]}
+                                shadowOpacity: 0.04,
+                                shadowRadius: 6,
+                                elevation: 2,
+                              }, isRTL && { alignItems: 'flex-end' }]}
                             >
-                              <View style={[{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 18,
-                                backgroundColor: isCompleted ? '#E6F4EA' : (isActive ? '#EBF5FF' : '#F1F5F9'),
-                                justifyContent: 'center',
-                                alignItems: 'center'
-                              }, isRTL ? { marginLeft: 12 } : { marginRight: 12 }]}>
-                                {getExerciseIcon(type, isCompleted ? '#10B981' : (isActive ? '#3B82F6' : '#94A3B8'))}
-                              </View>
+                              {/* Day label pill - top right */}
+                              {dayLabel ? (
+                                <View style={[{
+                                  flexDirection: isRTL ? 'row-reverse' : 'row',
+                                  justifyContent: isRTL ? 'flex-start' : 'flex-end',
+                                  marginBottom: 8
+                                }]}>
+                                  <View style={{
+                                    backgroundColor: isCompleted ? '#D1FAE5' : '#EFF6FF',
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 3,
+                                    borderRadius: 20,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 3
+                                  }}>
+                                    <Text style={{ fontSize: 9, color: isCompleted ? '#065F46' : '#1D4ED8' }}>📅</Text>
+                                    <Text style={{
+                                      fontSize: 10,
+                                      fontWeight: '700',
+                                      color: isCompleted ? '#065F46' : '#1D4ED8'
+                                    }}>
+                                      {dayLabel}
+                                    </Text>
+                                  </View>
+                                </View>
+                              ) : null}
 
-                              <View style={[{ flex: 1 }, isRTL && { alignItems: 'flex-end' }]}>
-                                <Text style={{
-                                  fontSize: 14,
-                                  fontWeight: '700',
-                                  color: '#1E293B',
-                                  textDecorationLine: isCompleted ? 'line-through' : 'none'
-                                }} numberOfLines={1}>
-                                  {name}
-                                </Text>
-                                <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                                  {duration}m . {type}
-                                </Text>
-                              </View>
+                              {/* Top row: icon + info */}
+                              <View style={[{ flexDirection: 'row', alignItems: 'center' }, isRTL && { flexDirection: 'row-reverse' }]}>
+                                <View style={[{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 20,
+                                  backgroundColor: isCompleted ? '#D1FAE5' : '#EBF5FF',
+                                  justifyContent: 'center',
+                                  alignItems: 'center'
+                                }, isRTL ? { marginLeft: 12 } : { marginRight: 12 }]}>
+                                  {getExerciseIcon(type, isCompleted ? '#10B981' : '#3B82F6')}
+                                </View>
 
-                              {/* Status Tag */}
-                              {isCompleted ? (
-                                <View style={[{ backgroundColor: '#E6F4EA', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
-                                  <Text style={{ fontSize: 10, fontWeight: '700', color: '#137333' }}>
-                                    {language === 'ar' ? 'مكتمل' : 'Done'}
+                                <View style={{ flex: 1 }}>
+                                  {/* Name row */}
+                                  <View style={[{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }, isRTL && { flexDirection: 'row-reverse' }]}>
+                                    {isCompleted && (
+                                      <Text style={{ color: '#10B981', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
+                                    )}
+                                    <Text style={{
+                                      fontSize: 14,
+                                      fontWeight: '700',
+                                      color: '#1E293B',
+                                      flexShrink: 1
+                                    }} numberOfLines={1}>
+                                      {name}
+                                    </Text>
+                                    {!isCompleted && (
+                                      <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '500' }}>
+                                        ({duration} {language === 'ar' ? 'دق' : 'min'})
+                                      </Text>
+                                    )}
+                                  </View>
+                                  <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 2, textAlign: isRTL ? 'right' : 'left' }}>
+                                    {type}
                                   </Text>
                                 </View>
-                              ) : (
-                                isActive ? (
-                                  <View style={[{ backgroundColor: '#EBF5FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
-                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#1E40AF' }}>
-                                      {language === 'ar' ? 'ابدأ الآن' : 'Start'}
+
+                                {/* Status Tag (completed only) */}
+                                {isCompleted && (
+                                  <View style={[{ backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
+                                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#065F46' }}>
+                                      {language === 'ar' ? 'مكتمل' : 'Done ✓'}
                                     </Text>
                                   </View>
-                                ) : (
-                                  <View style={[{ backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }, isRTL ? { marginRight: 8 } : { marginLeft: 8 }]}>
-                                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>
-                                      {language === 'ar' ? 'مغلق' : 'Locked'}
+                                )}
+                              </View>
+
+                              {/* Start Exercise button for active suggestions */}
+                              {!isCompleted && (
+                                <View style={{ marginTop: 12 }}>
+                                  <TouchableOpacity
+                                    style={{
+                                      backgroundColor: isFirstActive ? '#3B82F6' : '#93C5FD',
+                                      paddingHorizontal: 14,
+                                      paddingVertical: 9,
+                                      borderRadius: 10,
+                                      alignSelf: isRTL ? 'flex-start' : 'flex-end',
+                                      flexDirection: isRTL ? 'row-reverse' : 'row',
+                                      alignItems: 'center',
+                                      gap: 4
+                                    }}
+                                    onPress={() => {
+                                      setShowRoadmapModal(false);
+                                      handleSelectExercise(ex);
+                                    }}
+                                  >
+                                    <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>
+                                      {language === 'ar' ? 'ابدأ التمرين' : 'Start Exercise'}
                                     </Text>
-                                  </View>
-                                )
+                                    <ArrowRightIcon color="#FFFFFF" size={10} />
+                                  </TouchableOpacity>
+                                </View>
                               )}
                             </TouchableOpacity>
                           </View>
@@ -1704,12 +1777,12 @@ const s = StyleSheet.create({
   cardBody: { flex: 1 },
   cardTitle: { ...typography.bodySmall, fontWeight: '700', color: colors.textPrimary },
   cardDesc: { ...typography.caption, color: colors.textSecondary },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  metaText: { ...typography.caption, color: colors.textSecondary, marginLeft: 4, marginRight: 12 },
-  doneTag: { backgroundColor: colors.success + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginRight: 8 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, flexWrap: 'wrap', gap: 4 },
+  metaText: { ...typography.caption, color: colors.textSecondary, marginLeft: 4, marginRight: 8 },
+  doneTag: { backgroundColor: colors.success + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   doneTagText: { fontSize: 8, color: colors.success, fontWeight: 'bold' },
-  typeTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  typeTagText: { fontSize: 8, color: colors.textSecondary, fontWeight: 'bold' },
+  typeTag: { backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, maxWidth: 140, flexShrink: 1 },
+  typeTagText: { fontSize: 8, color: colors.textSecondary, fontWeight: 'bold', flexShrink: 1 },
   seeAllBtn: { padding: 16, backgroundColor: '#F8FAFC', borderRadius: 12, alignItems: 'center', marginTop: 8 },
   seeAllText: { color: colors.primary, fontWeight: 'bold' },
   countdownOverlay: { flex: 1, backgroundColor: 'rgba(22, 27, 34, 0.95)', justifyContent: 'center', alignItems: 'center' },

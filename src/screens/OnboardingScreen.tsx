@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { colors } from '../theme';
@@ -9,6 +10,7 @@ import { OnboardingService, OnboardingQuestion } from '../services/onboardingSer
 export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): React.ReactElement {
   const { userName, completeOnboarding, logout } = useAuth();
   const { t, isRTL, language } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [questions, setQuestions] = useState<OnboardingQuestion[]>([]);
   const [currentStep, setCurrentStep] = useState(1);
   const [selections, setSelections] = useState<Record<number, number[]>>({});
@@ -196,7 +198,7 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
 
     return (
       <SafeAreaView style={s.safeArea}>
-        <View style={s.container}>
+        <View style={[s.container, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
           {/* Top Row with Skip */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <Text style={{ fontSize: 14, fontWeight: '700', color: '#64748B' }}>Mentora Tour</Text>
@@ -316,7 +318,7 @@ export function OnboardingScreen({ onComplete }: { onComplete?: () => void }): R
 
   return (
     <SafeAreaView style={s.safeArea}>
-      <View style={s.container}>
+      <View style={[s.container, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
 
         {/* Header */}
         <View style={s.header}>
