@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, AppState, StatusBar, Linking,
+  Platform, ActivityIndicator, Alert, AppState, Linking, Keyboard, KeyboardEvent, Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -27,7 +27,7 @@ const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 interface Message {
   id: string;
   text: string;
-  sender: 'ai' | 'user' | 'system_warning' | 'system_crisis';
+  sender: 'ai' | 'user' | 'system_warning' | 'system_crisis' | 'system_session_end';
 }
 
 export function ChatScreen(): React.ReactElement {
@@ -38,13 +38,7 @@ export function ChatScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
 
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
-      sender: 'ai',
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
@@ -61,6 +55,39 @@ export function ChatScreen(): React.ReactElement {
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   useEffect(() => { isEndedRef.current = isEnded; }, [isEnded]);
   useEffect(() => { isCrisisRef.current = isCrisis; }, [isCrisis]);
+
+  const keyboardHeight = useRef(new Animated.Value(0)).current;
+
+  // Keyboard animation hook – moves input exactly above the keyboard
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const duration = Platform.OS === 'ios' ? 250 : 150;
+
+    const onShow = (e: KeyboardEvent) => {
+      Animated.timing(keyboardHeight, {
+        toValue: e.endCoordinates.height,
+        duration,
+        useNativeDriver: false,
+      }).start();
+      // Scroll to bottom when keyboard opens
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), duration + 50);
+    };
+    const onHide = () => {
+      Animated.timing(keyboardHeight, {
+        toValue: 0,
+        duration,
+        useNativeDriver: false,
+      }).start();
+    };
+
+    const showSub = Keyboard.addListener(showEvent, onShow);
+    const hideSub = Keyboard.addListener(hideEvent, onHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const updateActiveChatId = async () => {
@@ -117,6 +144,7 @@ export function ChatScreen(): React.ReactElement {
         if (allMappedMessages.length > 0 && !lastChatEnded) {
           setMessages(allMappedMessages);
         } else {
+          // Only set welcome message here; do not duplicate the initial state
           setMessages([
             {
               id: 'welcome_' + Date.now(),
@@ -131,10 +159,42 @@ export function ChatScreen(): React.ReactElement {
           setIsEnded(false);
           setIsCrisis(lastChatCrisis);
         } else {
+          // If the last chat ended, start a new one automatically
           const newId = await ChatService.startChat();
           if (newId) setChatId(newId);
           setIsEnded(false);
           setIsCrisis(false);
+
+          // Check if we need to show the session-complete alert sequence
+          const alertKey = await ChatService.getUserKey('@session_complete_alert');
+          const flag = await AsyncStorage.getItem(alertKey);
+          if (flag === 'exercises' || flag === 'none') {
+            await AsyncStorage.removeItem(alertKey);
+            // Alert 1: Session completed
+            Alert.alert(
+              'Session Completed',
+              'Session completed successfully.',
+              [{
+                text: 'OK',
+                onPress: () => {
+                  if (flag === 'exercises') {
+                    // Alert 2: Personalized exercises
+                    Alert.alert(
+                      'Exercises Available',
+                      'Personalized exercises are available based on your session.',
+                      [
+                        {
+                          text: 'Start Exercises',
+                          onPress: () => navigation.navigate('Exercises', { openSuggested: true }),
+                        },
+                        { text: 'Later', style: 'cancel' },
+                      ]
+                    );
+                  }
+                },
+              }]
+            );
+          }
         }
       } catch (e) {
         console.error('Init chat history error', e);
@@ -292,78 +352,109 @@ export function ChatScreen(): React.ReactElement {
     }
   };
 
+  const handleStartNewSession = async () => {
+    setIsThinking(true);
+    try {
+      const newId = await ChatService.startChat();
+      if (newId) {
+        setChatId(newId);
+        setIsEnded(false);
+        isEndedRef.current = false;
+        setIsCrisis(false);
+        isCrisisRef.current = false;
+        
+        setMessages([
+          {
+            id: 'welcome_' + Date.now(),
+            text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
+            sender: 'ai',
+          }
+        ]);
+      } else {
+        Alert.alert('Error', 'Could not start a new session. Please check your connection.');
+      }
+    } catch (err) {
+      console.error('Failed to start new session:', err);
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
   const finalizeChat = async (id: string) => {
     if (isEndedRef.current) return;
     isEndedRef.current = true;
-    setIsEnded(true);
 
+    let validExercises: any[] = [];
     try {
+      // endChat calls /summarize then /end — exactly once, no duplicates
       const result = await ChatService.endChat(id);
-      const exercises = result?._exercises || [];
+      validExercises = result?._exercises || [];
 
-      setMessages([
-        {
-          id: 'welcome_' + Date.now(),
-          text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
-          sender: 'ai',
-        }
-      ]);
-
-      const flagValue = exercises.length > 0 ? 'exercises' : 'none';
+      // Clear the HomeScreen polling flag so it cannot fire a duplicate alert
       const alertKey = await ChatService.getUserKey('@session_complete_alert');
-      await AsyncStorage.setItem(alertKey, flagValue);
+      await AsyncStorage.removeItem(alertKey);
+    } catch (e: any) {
+      console.error('End chat error', e);
+    }
 
-      const startFreshSession = async () => {
-        setIsThinking(true);
+    // Starts a fresh session after alerts are dismissed
+    const startFreshSession = () => {
+      setTimeout(async () => {
         try {
           const newId = await ChatService.startChat();
           if (newId) {
             setChatId(newId);
-            setIsEnded(false);
             isEndedRef.current = false;
+            setIsEnded(false);
             setIsCrisis(false);
             isCrisisRef.current = false;
+            setMessages([
+              {
+                id: 'welcome_' + Date.now(),
+                text: `Hi ${firstName}. I'm Mentora AI. I'm here to listen and help you through whatever is on your mind. How are you feeling today?`,
+                sender: 'ai',
+              }
+            ]);
           }
         } catch (err) {
           console.error('Failed to auto-start fresh session after end:', err);
-        } finally {
-          setIsThinking(false);
         }
-      };
+      }, 500);
+    };
 
-      await startFreshSession();
-
-      if (exercises.length > 0) {
-        Alert.alert(
-          'Session Complete',
-          'Mentora has suggested some exercises based on our conversation.',
-          [
-            { 
-              text: 'View Exercises', 
-              onPress: () => {
-                navigation.navigate('Exercises', { openSuggested: true });
-              } 
-            },
-            { 
-              text: 'Later', 
-              style: 'cancel'
-            }
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Session Ended',
-          'Your conversation session has been completed and summarized.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (e: any) {
-      console.error('End chat error', e);
-      Alert.alert(
-        'Debug Error ⚠️',
-        `Failed to finalize session: ${e.message || JSON.stringify(e)}`
-      );
-    }
+    // Alert 1 — always shown after session ends
+    Alert.alert(
+      'Session Completed',
+      'Session completed successfully.',
+      [{
+        text: 'OK',
+        onPress: () => {
+          if (validExercises.length > 0) {
+            // Alert 2 — only when exercises were returned
+            Alert.alert(
+              'Exercises Available',
+              'Personalized exercises are available based on your session.',
+              [
+                {
+                  text: 'Start Exercises',
+                  onPress: () => {
+                    navigation.navigate('Exercises', { openSuggested: true });
+                    startFreshSession();
+                  },
+                },
+                {
+                  text: 'Later',
+                  style: 'cancel',
+                  onPress: startFreshSession,
+                },
+              ]
+            );
+          } else {
+            startFreshSession();
+          }
+        },
+      }]
+    );
   };
 
   const handleCrisis = async (id: string) => {
@@ -439,6 +530,36 @@ export function ChatScreen(): React.ReactElement {
       );
     }
 
+    if (item.sender === 'system_session_end') {
+      return (
+        <View style={[
+          s.warningBubble,
+          { padding: 18, borderLeftWidth: 4, borderLeftColor: '#10B981', backgroundColor: '#F0FDF4' }
+        ]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+            <MessageSquare size={16} color="#10B981" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#065F46', fontWeight: 'bold', fontSize: 14 }}>Session Complete 🎉</Text>
+          </View>
+          <Text style={{ color: '#065F46', fontSize: 13, lineHeight: 20, marginBottom: 14 }}>
+            {item.text}
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#10B981', paddingVertical: 11,
+              borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'row', gap: 6,
+              shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.15, shadowRadius: 2, elevation: 3,
+            }}
+            onPress={() => navigation.navigate('Exercises', { openSuggested: true })}
+          >
+            <Activity size={15} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 13 }}>Start Exercises</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     if (item.sender === 'system_crisis') {
       return (
         <View style={s.crisisBubble}>
@@ -476,11 +597,9 @@ export function ChatScreen(): React.ReactElement {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={s.keyboardAv}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      {/* The Animated.View wraps the messages + input so the whole area lifts by exactly
+          the keyboard height, giving pixel-perfect placement above the keyboard */}
+      <Animated.View style={[s.keyboardAv, { marginBottom: keyboardHeight }]}>
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -502,7 +621,7 @@ export function ChatScreen(): React.ReactElement {
         />
 
         {!isCrisis && (
-          <View style={[s.inputArea, { paddingBottom: 12 }]}>
+          <View style={[s.inputArea, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             <View style={s.inputContainer}>
               <TextInput
                 style={s.textInput}
@@ -653,7 +772,7 @@ export function ChatScreen(): React.ReactElement {
             </View>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </Animated.View>
     </View>
   );
 }

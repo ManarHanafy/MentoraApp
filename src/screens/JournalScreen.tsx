@@ -53,6 +53,7 @@ const FILTER_OPTIONS = [
 
 export interface JournalEntry {
   id: string;
+  serverId?: number;
   title: string;
   preview: string;
   fullContent?: string;
@@ -157,28 +158,211 @@ export function JournalScreen(): React.ReactElement {
     );
   };
 
+  // Root cause fix #4: track language in a ref so the sync effect
+  // does not re-run every time the user switches language (which was
+  // causing a full re-merge and creating duplicate reconstructed entries).
+  const languageRef = useRef(language);
+  useEffect(() => { languageRef.current = language; }, [language]);
+
   useEffect(() => {
     (async () => {
+      let localList: JournalEntry[] = [];
+      const key = await getJournalKey();
       try {
-        const key = await getJournalKey();
         const stored = await AsyncStorage.getItem(key);
         if (stored) {
           const parsed = JSON.parse(stored) as JournalEntry[];
-          // Auto-delete old entries that do not have fullContent
-          const validEntries = parsed.filter(e => e.fullContent !== undefined);
-          setEntries(validEntries);
-          if (validEntries.length !== parsed.length) {
-            await AsyncStorage.setItem(key, JSON.stringify(validEntries));
+          // Auto-delete old entries that are silent exercise sync logs
+          const isExerciseLog = (e: JournalEntry) =>
+            (e.fullContent || '').startsWith('__sync__') ||
+            (e.fullContent || '').startsWith('Completed exercise:');
+          localList = parsed.filter(e => e.fullContent !== undefined && !isExerciseLog(e));
+          setEntries(localList);
+          if (localList.length !== parsed.length) {
+            await AsyncStorage.setItem(key, JSON.stringify(localList));
           }
         } else {
           setEntries([]); // Clear state if no stored entries exist for this user!
         }
       } catch (e) {
-        console.warn('Failed to load journals', e);
+        console.warn('Failed to load journals locally', e);
         setEntries([]);
       }
+
+      // Sync with server
+      try {
+        const token = await getApiToken();
+        if (token) {
+          const response = await fetch(`${API_BASE_URL}/Journals?PageSize=100`, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const serverItems = data.items || [];
+            
+            // Match and merge
+            const serverIdSet = new Set(localList.map(e => e.serverId).filter(Boolean));
+            
+            // Read skipped journal IDs
+            const skippedKey = email ? `@mentora_skipped_journals_${email.trim().toLowerCase()}` : '@mentora_skipped_journals';
+            let skippedIds: string[] = [];
+            try {
+              const skippedStr = await AsyncStorage.getItem(skippedKey);
+              if (skippedStr) skippedIds = JSON.parse(skippedStr);
+            } catch (err) {
+              console.warn('Failed to parse skipped journals list:', err);
+            }
+            const skippedSet = new Set(skippedIds.map(String));
+            
+            const newReconstructed: JournalEntry[] = [];
+            let updatedLocalList = [...localList];
+            
+            for (const sItem of serverItems) {
+              const sItemIdStr = String(sItem.id);
+               if (serverIdSet.has(sItem.id) || skippedSet.has(sItemIdStr)) {
+                continue;
+              }
+              
+              // Try to match with an existing local entry without serverId by timestamp
+              const sTime = new Date(sItem.createdAt).getTime();
+              let matchedIdx = updatedLocalList.findIndex(le => {
+                if (le.serverId) return false;
+                const leTime = parseInt(le.id, 10);
+                if (isNaN(leTime)) return false;
+                // Root cause fix #1: tightened from 30 min to 2 min.
+                // A 30-min window caused ANY clock skew > 2 min between client and server
+                // to miss the match, reconstructing a second copy of the same entry.
+                return Math.abs(leTime - sTime) < 120000; // 2 min tolerance
+              });
+              
+              if (matchedIdx !== -1) {
+                updatedLocalList[matchedIdx] = {
+                  ...updatedLocalList[matchedIdx],
+                  serverId: sItem.id
+                };
+              } else {
+                // Fetch detail to see actual text and check if it is a silent Completed exercise log
+                try {
+                  const detailRes = await fetch(`${API_BASE_URL}/Journals/${sItem.id}`, {
+                    method: 'GET',
+                    headers: {
+                      'Accept': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    }
+                  });
+                  if (detailRes.ok) {
+                    const details = await detailRes.json();
+                    
+                    // Reconstruct content by joining match_text if main text is empty
+                    const rawText = details.content || details.Content || details.journal_text || details.journalText || details.JournalText || '';
+                    const matchedItems = details.matched_items || [];
+                    const matchTexts: string[] = [];
+
+                    for (const mItem of matchedItems) {
+                      const subItems = mItem.items || [];
+                      for (const sub of subItems) {
+                        if (sub.match_text && !matchTexts.includes(sub.match_text)) {
+                          matchTexts.push(sub.match_text);
+                        }
+                      }
+                    }
+
+                    const journalText = rawText || matchTexts.join('\n');
+                    const normalizedText = journalText.trim();
+
+                    // Skip completed exercise sync logs or empty entries (e.g. dummy/sync logs with empty matches)
+                    const isCompletedOrEmpty = 
+                      !normalizedText || 
+                      normalizedText.startsWith('__sync__') || 
+                      normalizedText.startsWith('Completed exercise:') || 
+                      normalizedText.includes('Completed exercise') || 
+                      normalizedText.includes('__sync__');
+
+                    if (isCompletedOrEmpty) {
+                      skippedSet.add(sItemIdStr);
+                      continue;
+                    }
+
+                    const dateStr = new Date(sItem.createdAt).toLocaleString(languageRef.current === 'ar' ? 'ar-EG' : 'en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                    });
+                    const tagsList = sItem.tags || [];
+                    const titleText = details.title ||
+                      (languageRef.current === 'ar' ? 'بلا عنوان' : 'Untitled');
+
+                    const reconstructed: JournalEntry = {
+                      id: sTime.toString(),
+                      serverId: sItem.id,
+                      title: titleText,
+                      preview: normalizedText.substring(0, 80) + (normalizedText.length > 80 ? '…' : ''),
+                      fullContent: journalText,
+                      date: dateStr,
+                      tags: tagsList,
+                      type: 'text',
+                      locked: false
+                    };
+                    newReconstructed.push(reconstructed);
+                  }
+                } catch (err) {
+                  console.warn(`[JournalScreen] Failed to fetch details for journal ${sItem.id}`, err);
+                }
+              }
+            }
+            
+            // Save updated skipped journal list
+            if (skippedSet.size > skippedIds.length) {
+              try {
+                await AsyncStorage.setItem(skippedKey, JSON.stringify(Array.from(skippedSet)));
+              } catch (err) {
+                console.warn('Failed to save skipped journals list:', err);
+              }
+            }
+            
+            if (newReconstructed.length > 0 || updatedLocalList.some((le, idx) => le.serverId !== localList[idx]?.serverId)) {
+              const raw = [...newReconstructed, ...updatedLocalList];
+              // Root cause fix #5: deduplicate by serverId then by local id
+              // before writing to state and storage. This prevents a server entry
+              // that was both timestamp-matched AND reconstructed from appearing twice.
+              const seenServerIds = new Set<number>();
+              const seenLocalIds = new Set<string>();
+              const merged = raw.filter(e => {
+                if (e.serverId !== undefined) {
+                  if (seenServerIds.has(e.serverId)) return false;
+                  seenServerIds.add(e.serverId);
+                }
+                if (seenLocalIds.has(e.id)) return false;
+                seenLocalIds.add(e.id);
+                return true;
+              });
+              // Sort by ID descending (newest first)
+              merged.sort((a, b) => {
+                const aVal = parseInt(a.id, 10) || 0;
+                const bVal = parseInt(b.id, 10) || 0;
+                return bVal - aVal;
+              });
+
+              setEntries(merged);
+              await AsyncStorage.setItem(key, JSON.stringify(merged));
+              console.log(`[JournalSync] Merged ${newReconstructed.length} new entries. Total after dedup: ${merged.length}.`);
+            }
+          }
+        }
+        // Sync exercises and goals in the background
+        ExerciseService.restoreUserData().catch(e => {
+          console.warn('Failed to sync exercises/goals', e);
+        });
+      } catch (syncErr) {
+        console.warn('Failed to sync journals with server', syncErr);
+      }
     })();
-  }, []);
+  // Root cause fix #4: removed `language` from deps — language changes are
+  // tracked via languageRef so the effect does not re-run on language switch.
+  }, [email]);
 
   useEffect(() => {
     console.log('FILTER:', filter);
@@ -312,18 +496,9 @@ export function JournalScreen(): React.ReactElement {
         return;
       }
 
-      // Get the real token from the API
+      // === SEND TO AI AND SAVE (blocking flow to ensure tags and server response are complete) ===
       const token = await getApiToken();
-
-      // Debug: log what token we have
-      console.log('=== JOURNAL DEBUG ===');
-      console.log('Token found:', token ? `YES (${token.substring(0, 20)}...)` : 'NO TOKEN');
-      console.log('Token is mock?', token.startsWith('mock_'));
-
-      const apiUrl = API_BASE_URL;
-      console.log('Saving entry to:', `${apiUrl}/Journals`);
-
-      const response = await fetch(`${apiUrl}/Journals`, {
+      const response = await fetch(`${API_BASE_URL}/Journals`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -334,49 +509,102 @@ export function JournalScreen(): React.ReactElement {
       });
       console.log('Journal API response status:', response.status);
 
-      let tags: string[] = [];
       if (response.ok) {
         const data = await response.json();
+
+        // Parse tags from AI response
+        let tags: string[] = [];
         const apiTags = data.tags || data.Tags;
         if (Array.isArray(apiTags)) {
           tags = apiTags;
         } else if (typeof apiTags === 'string') {
           try {
             const parsed = JSON.parse(apiTags);
-            if (Array.isArray(parsed)) {
-              tags = parsed;
-            } else {
-              tags = apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
-            }
-          } catch (e) {
+            tags = Array.isArray(parsed) ? parsed : apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
+          } catch {
             tags = apiTags.split(',').map((t: string) => t.trim()).filter(Boolean);
           }
         }
-        
-        // === DEBUG: Log full API response to see exact fields ===
-        console.log('=== JOURNAL API FULL RESPONSE ===');
-        console.log(JSON.stringify(data, null, 2));
 
-        // === UNIQUE LIBRARY MAPPING ===
-        // We map the suggested exercises from the backend to our library exercises
+        // Save suggested exercises from AI
         const aiSuggested = data.suggested_exercises || data.suggestedExercises || data.SuggestedExercises || [];
-        
-        // Process AI suggested exercises if present
         if (aiSuggested && aiSuggested.length > 0) {
-            await ExerciseService.saveSuggestedExercises(aiSuggested);
-            console.log('Saved', aiSuggested.length, 'suggested exercises from journal');
+          await ExerciseService.saveSuggestedExercises(aiSuggested);
+          console.log('Saved', aiSuggested.length, 'suggested exercises from journal');
+          
+          Alert.alert(
+            languageRef.current === 'ar' ? 'تم اقتراح تمارين جديدة' : 'New Exercises Suggested',
+            languageRef.current === 'ar' 
+              ? `تمت إضافة تمارين مخصصة بناءً على كتابتك.` 
+              : `Added personalized exercises based on your entry.`,
+            [
+              { 
+                text: languageRef.current === 'ar' ? 'ابدأ الآن' : 'Start Now', 
+                onPress: () => navigation.navigate('Exercises', { openSuggested: true }) 
+              },
+              { 
+                text: languageRef.current === 'ar' ? 'لاحقاً' : 'Later', 
+                style: 'cancel' 
+              }
+            ]
+          );
         }
 
-        // === CRISIS DETECTION FROM API ===
-        // Show crisis modal only if AI detects crisis or danger risk
+        // Crisis detection from AI
         const apiRiskLevel = (data.risk_level || data.riskLevel || data.RiskLevel || 'normal').toLowerCase();
         const isApiCrisis = apiRiskLevel === 'crisis' || apiRiskLevel === 'danger';
         if (isApiCrisis) {
           setJournalCrisisVisible(true);
         }
-        
+
+        // Root cause fix #2: the POST response (JournalResponse) already contains
+        // the new entry's Id. Using a secondary GET?PageSize=1 was a race condition —
+        // if another entry was created simultaneously (e.g. mood service), the list
+        // fetch could return the WRONG serverId, breaking sync deduplication.
+        const serverId: number | undefined = data.id ?? data.Id ?? undefined;
+        console.log('[JournalScreen] New journal serverId from POST response:', serverId);
+
+        const defaultTitle = languageRef.current === 'ar' ? 'بلا عنوان' : 'Untitled';
+        const newEntry: JournalEntry = {
+          id: Date.now().toString(),
+          serverId,
+          title: newTitle.trim() || defaultTitle,
+          preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
+          fullContent: newContent.trim(),
+          date: new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit',
+          }),
+          tags,
+          type: 'text',
+          locked: lockedChecked,
+        };
+
+        // Root cause fix #3: use functional setState to read the current live
+        // React state instead of re-reading AsyncStorage (which may be stale if
+        // the sync useEffect ran between our getItem and setItem calls).
+        const key = await getJournalKey();
+        setEntries(prev => {
+          // Guard: skip insert if an entry with the same serverId or local id already exists
+          const isDuplicate = prev.some(e =>
+            (newEntry.serverId !== undefined && e.serverId === newEntry.serverId) ||
+            e.id === newEntry.id
+          );
+          if (isDuplicate) {
+            console.warn('[JournalScreen] Prevented duplicate insert for serverId:', newEntry.serverId);
+            return prev;
+          }
+          const updated = [newEntry, ...prev];
+          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(e =>
+            console.warn('[JournalScreen] Failed to persist new entry', e)
+          );
+          return updated;
+        });
+
+        setIsSaving(false);
+        closeWrite();
       } else {
-        // AI API failed — do NOT save the entry (strict blocking behavior)
+        // AI API failed — show alert, do not save (user can retry)
         const statusCode = response.status;
         let errBody = '';
         try { errBody = await response.text(); } catch {}
@@ -389,40 +617,17 @@ export function JournalScreen(): React.ReactElement {
         setIsSaving(false);
         return;
       }
-
-      const defaultTitle = language === 'ar' ? 'بلا عنوان' : 'Untitled';
-      const newEntry: JournalEntry = {
-        id: Date.now().toString(),
-        title: newTitle.trim() || defaultTitle,
-        preview: newContent.trim().slice(0, 80) + (newContent.trim().length > 80 ? '…' : ''),
-        fullContent: newContent.trim(),
-        date: new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
-          month: 'short', day: 'numeric', year: 'numeric',
-          hour: 'numeric', minute: '2-digit',
-        }),
-        tags,
-        type: 'text',
-        locked: lockedChecked,
-      };
-      setEntries((prev) => {
-        const updated = [newEntry, ...prev];
-        getJournalKey().then(key =>
-          AsyncStorage.setItem(key, JSON.stringify(updated)).catch(console.warn)
-        );
-        return updated;
-      });
     } catch (error) {
-      console.warn('Failed to save entry to API:', error);
+      console.warn('Failed to save entry:', error);
       Alert.alert(
         language === 'ar' ? 'فشل الحفظ' : 'Failed to Save',
         language === 'ar' ? 'حدث خطأ أثناء حفظ اليومية. يرجى المحاولة مرة أخرى.' : 'An error occurred while saving the journal entry. Please try again.',
         [{ text: t.common.ok, style: 'default' }]
       );
-    } finally {
       setIsSaving(false);
-      closeWrite();
     }
   };
+
 
   const JournalEntryCard = ({ item }: { item: JournalEntry }) => {
     const handlePress = async () => {

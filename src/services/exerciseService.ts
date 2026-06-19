@@ -13,6 +13,7 @@ export interface Exercise {
   exerciseCode?: string;
   queueId?: string;
   completedAt?: string | number;
+  suggestedAt?: number;
   goals?: string[];
   frequency?: string;
   researchBasis?: string;
@@ -78,7 +79,8 @@ rawExercises.forEach((item: any) => {
 });
 
 
-
+// In-memory cache for exercise details fetched from server (clears on app restart)
+const _exerciseDetailsCache: Record<string, Partial<Exercise>> = {};
 
 export const EXCLUDED_EXERCISE_IDS = [
   'Reality_Check_Journal_Weekly',
@@ -116,6 +118,11 @@ export const ExerciseService = {
   getExerciseDetailsFromServer: async (idName: string): Promise<Partial<Exercise>> => {
     // 1. Get local fallback details to merge rich content
     const local = ExerciseService.getExerciseDetailsByCode(idName) || {};
+
+    // 2. Return from in-memory cache instantly if already fetched this session
+    if (_exerciseDetailsCache[idName]) {
+      return _exerciseDetailsCache[idName];
+    }
 
     try {
       const token = await ExerciseService.getAuthToken();
@@ -158,7 +165,7 @@ export const ExerciseService = {
           finalGoals = local.goals;
         }
 
-        return {
+        const result: Partial<Exercise> = {
           id: data.id || data.Id || local.id || idName,
           name: data.name || data.Name || local.name || idName,
           description: data.fullDescription || data.Description || data.description || local.description || '',
@@ -175,12 +182,17 @@ export const ExerciseService = {
           videoUrl: data.videoUrl || data.VideoUrl || local.videoUrl,
           videoTitle: data.videoTitle || data.VideoTitle || local.videoTitle
         };
+        // Store in cache for instant access next time
+        _exerciseDetailsCache[idName] = result;
+        return result;
       } else {
         console.warn(`Exercise details API returned ${response.status} for ${idName}. Falling back to local.`);
       }
     } catch (error) {
       console.warn(`Network error fetching details for ${idName}, falling back to local:`, error);
     }
+    // Cache the local fallback too so we don't retry every time
+    _exerciseDetailsCache[idName] = local;
     return local;
   },
 
@@ -206,7 +218,6 @@ export const ExerciseService = {
 
   getLocalLibraryExercises: (): Exercise[] => {
     return Object.entries(EXERCISE_LIBRARY_MAP)
-      .filter(([code]) => !EXCLUDED_EXERCISE_IDS.includes(code))
       .map(([code, ex]) => ({
         id: code,
         name: ex.name || 'Mindfulness Exercise',
@@ -220,30 +231,22 @@ export const ExerciseService = {
       }));
   },
 
-  getAllExercises: async (): Promise<Exercise[]> => {
+  getAllExercises: (): Exercise[] => {
+    // Return local library instantly — no network wait needed for the list
+    return ExerciseService.getLocalLibraryExercises();
+  },
+
+  // Background-only: refresh exercise list from server (does not block UI)
+  refreshExercisesFromServer: async (): Promise<Exercise[]> => {
     try {
       const token = await ExerciseService.getAuthToken();
       const response = await fetch(`${API_BASE_URL}/Exercises`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      
-      if (!response.ok) {
-        console.warn(`Exercise API returned ${response.status}. Falling back to local library.`);
-        return ExerciseService.getLocalLibraryExercises();
-      }
-      
+      if (!response.ok) return ExerciseService.getLocalLibraryExercises();
       const data = await response.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        return ExerciseService.getLocalLibraryExercises();
-      }
-      
+      if (!Array.isArray(data) || data.length === 0) return ExerciseService.getLocalLibraryExercises();
       return data
-        .filter((ex: any) => {
-          const id = ex.id || ex.Id || ex.exerciseCode || ex.ExerciseCode || '';
-          return !EXCLUDED_EXERCISE_IDS.includes(id);
-        })
         .map((ex: any) => ({
           id: ex.id || ex.Id,
           name: ex.name || ex.Name || ex.exerciseCode || 'AI Suggested',
@@ -262,14 +265,13 @@ export const ExerciseService = {
   },
 
   // حفظ التمارين المقترحة من الـ AI
-  saveSuggestedExercises: async (exercises: any[]): Promise<void> => {
+  saveSuggestedExercises: async (exercises: any[], timestamp?: number): Promise<void> => {
     try {
-      const filteredInput = exercises.filter((ex: any) => {
-        const id = typeof ex === 'string' ? ex : (ex.id || ex.exerciseCode || ex.exercise_code || '');
-        return !EXCLUDED_EXERCISE_IDS.includes(id);
-      });
+      const filteredInput = exercises;
 
-      const mapped = filteredInput.map((ex: any) => {
+      const allExercises = ExerciseService.getAllExercises();
+
+      const mapped = filteredInput.map((ex: any, idx: number) => {
         // Handle case where ex is just a string (the name or code of the exercise)
         if (typeof ex === 'string') {
           const details = ExerciseService.getExerciseDetailsByCode(ex);
@@ -287,18 +289,40 @@ export const ExerciseService = {
         }
         
         // Find code and look up details in local library map
+        const exerciseId = ex.id || ex.exerciseId || ex.ExerciseId;
         const code = ex.exerciseCode || ex.exercise_code || ex.code || (typeof ex.id === 'string' && ex.id.includes('_') ? ex.id : '');
-        const details = code ? ExerciseService.getExerciseDetailsByCode(code) : {};
+        
+        const dbMatch = allExercises.find(dbEx => 
+            (exerciseId && dbEx.id === exerciseId) || 
+            (code && dbEx.exerciseCode === code)
+        );
+        
+        const libraryDetails = ExerciseService.getExerciseDetailsByCode(code || (dbMatch as any)?.exerciseCode);
+        
+        if (dbMatch) {
+           const isNameCode = dbMatch.name === code || dbMatch.name?.includes('_');
+           return {
+              id: exerciseId || dbMatch.id || Date.now().toString() + Math.random(),
+              name: ex.name || ex.Name || ((isNameCode && libraryDetails.name) ? libraryDetails.name : (dbMatch.name || libraryDetails.name)),
+              description: ex.description || ex.Description || dbMatch.description || libraryDetails.description || '',
+              exerciseType: ex.exerciseType || ex.ExerciseType || dbMatch.exerciseType || libraryDetails.exerciseType || 'General',
+              durationMinutes: ex.durationMinutes !== undefined ? ex.durationMinutes : ((libraryDetails.durationMinutes !== undefined) ? libraryDetails.durationMinutes : (dbMatch.durationMinutes || 5)),
+              difficulty: ex.difficulty || ex.Difficulty || dbMatch.difficulty || libraryDetails.difficulty || 'Medium',
+              instructions: ex.instructions || ex.Instructions || dbMatch.instructions || libraryDetails.instructions || '',
+              exerciseCode: code || dbMatch.exerciseCode,
+              isActive: true
+           };
+        }
 
-        const name = ex.name || ex.Name || ex.title || ex.Title || details.name || 'Mindfulness Exercise';
-        const description = ex.description || ex.Description || details.description || 'A recommended wellness exercise designed for your current needs.';
-        const instructions = ex.instructions || ex.Instructions || details.instructions || description || '';
-        const exerciseType = ex.exerciseType || ex.ExerciseType || details.exerciseType || 'General';
-        const durationMinutes = ex.durationMinutes !== undefined ? ex.durationMinutes : (details.durationMinutes !== undefined ? details.durationMinutes : 5);
-        const difficulty = ex.difficulty || ex.Difficulty || details.difficulty || 'Medium';
+        const name = ex.name || ex.Name || ex.title || ex.Title || libraryDetails.name || 'Mindfulness Exercise';
+        const description = ex.description || ex.Description || libraryDetails.description || 'A recommended wellness exercise designed for your current needs.';
+        const instructions = ex.instructions || ex.Instructions || libraryDetails.instructions || description || '';
+        const exerciseType = ex.exerciseType || ex.ExerciseType || libraryDetails.exerciseType || 'General';
+        const durationMinutes = ex.durationMinutes !== undefined ? ex.durationMinutes : (libraryDetails.durationMinutes !== undefined ? libraryDetails.durationMinutes : 5);
+        const difficulty = ex.difficulty || ex.Difficulty || libraryDetails.difficulty || 'Medium';
 
         return {
-          id: ex.id || ex.Id || Date.now().toString() + Math.random(),
+          id: exerciseId || code || Date.now().toString() + Math.random(),
           name,
           description,
           exerciseType,
@@ -312,21 +336,47 @@ export const ExerciseService = {
       const key = await ExerciseService.getUserKey('@suggested_exercises');
       const existingStr = await AsyncStorage.getItem(key);
       let existing = existingStr ? JSON.parse(existingStr) : [];
-      
-      // Give them unique instance IDs so we can remove them specifically without affecting identical recommendations
-      const timestamped = mapped.map(ex => ({ 
-        ...ex, 
+
+      console.log('[saveSuggested] incoming raw:', exercises.length, '→ after EXCLUDED filter:', filteredInput.length, '→ mapped:', mapped.length);
+      console.log('[saveSuggested] existing in storage:', existing.length);
+
+      // Deduplicate the incoming mapped list itself first (same exercise may appear in multiple AI responses)
+      const seenIncoming = new Set<string>();
+      const dedupedMapped = mapped.filter((ex: any) => {
+        const k = (ex.exerciseCode || ex.name || String(ex.id)).toLowerCase().trim();
+        if (seenIncoming.has(k)) return false;
+        seenIncoming.add(k);
+        return true;
+      });
+
+      console.log('[saveSuggested] after incoming dedup:', dedupedMapped.length);
+
+      // Give them unique instance IDs so we can remove them specifically
+      const timestamped = dedupedMapped.map((ex: any) => ({
+        ...ex,
         queueId: Date.now().toString() + Math.random().toString(),
-        suggestedAt: Date.now()
+        suggestedAt: timestamp || Date.now()
       }));
       
-      // Remove any existing pending exercises that are being re-suggested 
-      // to avoid duplicates and move the latest suggestions to the top
+      // Remove existing exercises only if the new batch has the SAME exerciseCode or same id.
+      // Do NOT remove by name alone — different exercises can share a similar name
+      // and name-based removal was causing the queue to never grow.
       const cleanExisting = existing.filter((oldEx: any) => 
-          !timestamped.some(newEx => newEx.id == oldEx.id || newEx.name == oldEx.name)
+          !timestamped.some((newEx: any) => {
+            // Only deduplicate by exerciseCode (most reliable identifier)
+            const sameCode = newEx.exerciseCode && oldEx.exerciseCode &&
+              newEx.exerciseCode.toLowerCase().trim() === oldEx.exerciseCode.toLowerCase().trim();
+            // Also deduplicate by numeric/string id when both are present and stable
+            const sameId = newEx.id && oldEx.id &&
+              String(newEx.id) === String(oldEx.id) &&
+              !String(newEx.id).includes('.'); // skip random float IDs
+            return sameCode || sameId;
+          })
       );
       
       const updated = [...timestamped, ...cleanExisting];
+      console.log('[saveSuggested] cleanExisting kept:', cleanExisting.length, '→ total saved to storage:', updated.length);
+      console.log('[saveSuggested] codes in storage:', updated.map((x:any) => x.exerciseCode || x.name).join(', '));
       await AsyncStorage.setItem(key, JSON.stringify(updated));
     } catch (e) {
       console.error('Failed to save suggested exercises:', e);
@@ -355,8 +405,7 @@ export const ExerciseService = {
       const key = await ExerciseService.getUserKey('@suggested_exercises');
       const stored = await AsyncStorage.getItem(key);
       if (!stored) return [];
-      const list = JSON.parse(stored);
-      return list.filter((ex: any) => !EXCLUDED_EXERCISE_IDS.includes(ex.id || ex.exerciseCode));
+      return JSON.parse(stored);
     } catch (error) {
       return [];
     }
@@ -367,22 +416,41 @@ export const ExerciseService = {
       const key = await ExerciseService.getUserKey('@completed_exercises');
       const stored = await AsyncStorage.getItem(key);
       if (!stored) return [];
-      const list = JSON.parse(stored);
-      return list.filter((ex: any) => !EXCLUDED_EXERCISE_IDS.includes(ex.id || ex.exerciseCode));
+      return JSON.parse(stored);
     } catch (error) { return []; }
   },
 
   saveCompletedExercise: async (exercise: Exercise) => {
     try {
-      if (EXCLUDED_EXERCISE_IDS.includes(String(exercise.id)) || EXCLUDED_EXERCISE_IDS.includes(String(exercise.exerciseCode))) {
-        return;
-      }
       const key = await ExerciseService.getUserKey('@completed_exercises');
       const completed = await ExerciseService.getCompletedExercises();
       // Remove any existing entry with the same ID, then add to the front
       const filtered = completed.filter((c: Exercise) => c.id !== exercise.id);
       const updated = [{ ...exercise, completedAt: Date.now() }, ...filtered];
       await AsyncStorage.setItem(key, JSON.stringify(updated));
+
+      // Fire-and-forget: immediate local notification for exercise completion
+      try {
+        const { NotificationService } = require('./notificationService');
+        NotificationService.sendExerciseCompletedNotification(exercise.name);
+      } catch (_) {}
+
+      // Fire-and-forget: post silent sync log to server for cross-device restore
+      // Uses __sync__ prefix so JournalScreen will always skip displaying it
+      ExerciseService.getAuthToken().then(token => {
+        if (!token) return;
+        const bodyPayload = {
+          journal_text: `__sync__ Completed exercise: ${exercise.name} (Code: ${exercise.exerciseCode || exercise.id})`
+        };
+        fetch(`${API_BASE_URL}/Journals`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(bodyPayload)
+        }).catch(() => {});
+      }).catch(() => {});
     } catch (error) { console.error(error); }
   },
 
@@ -398,5 +466,209 @@ export const ExerciseService = {
 
   clearCache: () => {
     // Keep as a no-op for AuthContext compatibility during logout
+  },
+
+  restoreUserData: async (): Promise<void> => {
+    try {
+      const token = await ExerciseService.getAuthToken();
+      if (!token) return;
+
+      const restoredKey = await ExerciseService.getUserKey('@processed_restorations');
+      const processedStr = await AsyncStorage.getItem(restoredKey);
+      const processedList: string[] = processedStr ? JSON.parse(processedStr) : [];
+      const processedSet = new Set(processedList);
+
+      // Helper: restore a single completed exercise by name or code
+      const restoreCompletedExercise = async (rawText: string, createdAt?: string) => {
+        // Format: "Completed exercise: [Name] (Code: [code])" OR just "Completed exercise: [Name]"
+        const codeMatch = rawText.match(/\(Code:\s*([^)]+)\)/i);
+        const nameOnly = rawText
+          .replace(/\(Code:[^)]+\)/i, '')
+          .replace('Completed exercise:', '')
+          .trim();
+        const exerciseCode = codeMatch ? codeMatch[1].trim() : null;
+
+        const localLibrary = ExerciseService.getLocalLibraryExercises();
+        // Try match by code first, then by name
+        let matchedEx: Exercise | undefined;
+        if (exerciseCode) {
+          matchedEx = localLibrary.find(ex =>
+            (ex.exerciseCode || '').toUpperCase() === exerciseCode.toUpperCase() ||
+            String(ex.id).toUpperCase() === exerciseCode.toUpperCase()
+          );
+        }
+        if (!matchedEx && nameOnly) {
+          matchedEx = localLibrary.find(ex => ex.name.toLowerCase() === nameOnly.toLowerCase());
+        }
+
+        if (matchedEx) {
+          const compKey = await ExerciseService.getUserKey('@completed_exercises');
+          const storedCompleted = await AsyncStorage.getItem(compKey);
+          let completedList: Exercise[] = storedCompleted ? JSON.parse(storedCompleted) : [];
+          const alreadyExists = completedList.some((c: Exercise) =>
+            c.id === matchedEx!.id ||
+            (c.exerciseCode && c.exerciseCode === matchedEx!.exerciseCode)
+          );
+          if (!alreadyExists) {
+            const completedAt = createdAt ? new Date(createdAt).getTime() : Date.now();
+            completedList.push({ ...matchedEx, completedAt });
+            await AsyncStorage.setItem(compKey, JSON.stringify(completedList));
+            console.log('[ExerciseService] Restored completed exercise:', matchedEx.name);
+          }
+        }
+      };
+
+      // 1. Fetch journals list
+      const journalsRes = await fetch(`${API_BASE_URL}/Journals?PageSize=100`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (journalsRes.ok) {
+        const journalsData = await journalsRes.json();
+        const items = journalsData.items || [];
+        for (const item of items) {
+          const idStr = String(item.id);
+          if (processedSet.has(idStr)) continue;
+
+          // Fetch details
+          try {
+            const detailRes = await fetch(`${API_BASE_URL}/Journals/${item.id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (detailRes.ok) {
+              const details = await detailRes.json();
+              
+              // Restore suggested exercises from AI response
+              // Only re-add exercises that haven't been completed yet
+              const rawSuggestions = details.suggested_exercises || details.suggestedExercises || details.SuggestedExercises || [];
+              if (rawSuggestions.length > 0) {
+                const completedList = await ExerciseService.getCompletedExercises();
+                const completedIds = new Set(completedList.map((c: any) => String(c.exerciseCode || c.id || '').toUpperCase()));
+                const completedNames = new Set(completedList.map((c: any) => String(c.name || '').toLowerCase().trim()));
+                const filteredSuggestions = rawSuggestions.filter((s: any) => {
+                  const sCode = String(s.exerciseCode || s.exercise_code || s.code || s.id || '').toUpperCase();
+                  const sName = String(s.name || s.Name || s.title || '').toLowerCase().trim();
+                  return !completedIds.has(sCode) && !completedNames.has(sName);
+                });
+                if (filteredSuggestions.length > 0) {
+                  const journalTime = item.createdAt ? new Date(item.createdAt).getTime() : Date.now();
+                  await ExerciseService.saveSuggestedExercises(filteredSuggestions, journalTime);
+                }
+              }
+
+              // Path A: Parse raw journal_text directly (our sync log format)
+              const journalText: string = details.content || details.Content || details.journal_text || details.journalText || details.JournalText || '';
+              // Support new __sync__ prefix and old 'Completed exercise:' format
+              const normalizedText = journalText.startsWith('__sync__')
+                ? journalText.replace('__sync__', '').trim()
+                : journalText;
+              if (normalizedText.startsWith('Completed exercise:')) {
+                await restoreCompletedExercise(normalizedText, item.createdAt);
+              }
+
+              // Path B: Parse matched_items (AI may echo the text back)
+              const matchedItems = details.matched_items || [];
+              for (const mItem of matchedItems) {
+                const subItems = mItem.items || [];
+                for (const sub of subItems) {
+                  const matchText: string = sub.match_text || '';
+                  const normalizedMatch = matchText.startsWith('__sync__')
+                    ? matchText.replace('__sync__', '').trim()
+                    : matchText;
+                  if (normalizedMatch.startsWith('Completed exercise:')) {
+                    await restoreCompletedExercise(normalizedMatch, item.createdAt);
+                  }
+                }
+              }
+
+              processedSet.add(idStr);
+            }
+          } catch (e) {
+            console.warn('[ExerciseService] restore journal error for id ' + item.id, e);
+          }
+        }
+      }
+
+      // 2. Fetch chats list to restore suggested exercises
+      const chatsRes = await fetch(`${API_BASE_URL}/Chats?pageSize=20`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (chatsRes.ok) {
+        const chatsData = await chatsRes.json();
+        const chatItems = chatsData.items || [];
+        for (const item of chatItems) {
+          const idStr = 'chat_' + item.id;
+          if (processedSet.has(idStr)) continue;
+
+          try {
+            const summaryRes = await fetch(`${API_BASE_URL}/Chats/${item.id}/summary`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (summaryRes.ok) {
+              const summaryData = await summaryRes.json();
+              const rawSuggestions = summaryData.suggestedExercises || summaryData.suggested_exercises || [];
+              if (rawSuggestions.length > 0) {
+                // Only re-add exercises that haven't been completed yet
+                const completedList = await ExerciseService.getCompletedExercises();
+                const completedIds = new Set(completedList.map((c: any) => String(c.exerciseCode || c.id || '').toUpperCase()));
+                const completedNames = new Set(completedList.map((c: any) => String(c.name || '').toLowerCase().trim()));
+                const filteredSuggestions = rawSuggestions.filter((s: any) => {
+                  const sCode = String(s.exerciseCode || s.exercise_code || s.code || s.id || '').toUpperCase();
+                  const sName = String(s.name || s.Name || s.title || '').toLowerCase().trim();
+                  return !completedIds.has(sCode) && !completedNames.has(sName);
+                });
+                if (filteredSuggestions.length > 0) {
+                  const chatTime = item.createdAt ? new Date(item.createdAt).getTime() : Date.now();
+                  await ExerciseService.saveSuggestedExercises(filteredSuggestions, chatTime);
+                }
+              }
+              processedSet.add(idStr);
+            }
+          } catch (e) {
+            console.warn('[ExerciseService] restore chat error for id ' + item.id, e);
+          }
+        }
+      }
+
+      await AsyncStorage.setItem(restoredKey, JSON.stringify(Array.from(processedSet)));
+      console.log('[ExerciseService] restoreUserData completed successfully.');
+    } catch (err) {
+      console.warn('[ExerciseService] restoreUserData failed:', err);
+    }
+  },
+
+  filterActiveSuggestions: (suggested: Exercise[], completed: Exercise[]): Exercise[] => {
+    const active = (suggested || []).filter(s => {
+       const sTime = s.suggestedAt || 0;
+       // Check if this exercise was completed (at any time if suggestedAt=0, or after it was suggested)
+       const wasCompleted = (completed || []).some(c => {
+         const cTime = typeof c.completedAt === 'number' ? c.completedAt : (typeof c.completedAt === 'string' ? parseInt(c.completedAt, 10) : 0);
+         const isSameEx =
+           (c.id && s.id && String(c.id) === String(s.id)) ||
+           (c.exerciseCode && s.exerciseCode && c.exerciseCode.toUpperCase() === s.exerciseCode.toUpperCase()) ||
+           (c.name && s.name && c.name.toLowerCase().trim() === s.name.toLowerCase().trim());
+         return isSameEx && (sTime === 0 ? cTime > 0 : cTime > sTime);
+       });
+       return !wasCompleted;
+    });
+
+    console.log('[filterActive] suggested input:', suggested?.length, '→ after completion filter:', active.length, '(completed pool:', completed?.length, ')');
+
+    // Deduplicate: one entry per exerciseCode (newest first), fallback by name.
+    const deduplicated: Exercise[] = [];
+    const seenCodes = new Set<string>();
+    const seenNames = new Set<string>();
+    for (const ex of active) {
+      if (ex.exerciseCode) {
+        const k = ex.exerciseCode.toLowerCase().trim();
+        if (!seenCodes.has(k)) { seenCodes.add(k); deduplicated.push(ex); }
+      } else {
+        const k = (ex.name || String(ex.id)).toLowerCase().trim();
+        if (!seenNames.has(k)) { seenNames.add(k); deduplicated.push(ex); }
+      }
+    }
+
+    console.log('[filterActive] after dedup:', deduplicated.length, '→ codes:', deduplicated.map(x => x.exerciseCode || x.name).join(', '));
+    return deduplicated;
   }
+
 };

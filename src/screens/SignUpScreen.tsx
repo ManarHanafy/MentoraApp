@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, 
   KeyboardAvoidingView, Platform, SafeAreaView, Image, Alert, Modal, FlatList, ActivityIndicator
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { EmailService } from '../services/emailService';
 
 import Svg, { Path, Circle } from 'react-native-svg';
 
@@ -72,6 +73,17 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // ── OTP Verification States ─────────────────────────────────────
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
+  const otpInputRef = useRef<TextInput>(null);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Date Picker States
   const [datePickerVisible, setDatePickerVisible] = useState(false);
@@ -158,7 +170,31 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
     }
   };
 
+  // ── Generate and send OTP ─────────────────────────────────────────
+  const generateOtp = (): string => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
 
+  const startCooldown = () => {
+    setOtpResendCooldown(60);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setOtpResendCooldown(prev => {
+        if (prev <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const sendOtpEmail = async (targetEmail: string, targetName: string): Promise<boolean> => {
+    const code = generateOtp();
+    setGeneratedOtp(code);
+    const result = await EmailService.sendOTP(targetEmail, code, targetName);
+    return result.success;
+  };
 
   const handleSignUp = async () => {
     if (!name || !email || !password) {
@@ -192,7 +228,69 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
       return;
     }
 
-    // Register directly — no email verification step
+    // Step 1: Send OTP email verification
+    setIsSendingOtp(true);
+    try {
+      const firstName = name.trim().split(' ')[0] || name;
+      const sent = await sendOtpEmail(email, firstName);
+      if (sent) {
+        setOtpCode('');
+        setOtpError('');
+        setOtpModalVisible(true);
+        startCooldown();
+        setTimeout(() => otpInputRef.current?.focus(), 400);
+      } else {
+        // EmailJS failed — proceed with registration directly (graceful fallback)
+        console.warn('[SignUp] OTP email failed to send, proceeding with direct registration');
+        await completeRegistration();
+      }
+    } catch (e: any) {
+      // Email send threw — still proceed to not block the user
+      console.warn('[SignUp] OTP send error:', e);
+      await completeRegistration();
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (otpResendCooldown > 0) return;
+    setIsSendingOtp(true);
+    try {
+      const firstName = name.trim().split(' ')[0] || name;
+      const sent = await sendOtpEmail(email, firstName);
+      if (sent) {
+        startCooldown();
+        setOtpError('');
+        setOtpCode('');
+        setTimeout(() => otpInputRef.current?.focus(), 200);
+      } else {
+        setOtpError(language === 'ar' ? 'فشل إعادة الإرسال. حاول مرة أخرى.' : 'Failed to resend. Please try again.');
+      }
+    } catch {
+      setOtpError(language === 'ar' ? 'فشل إعادة الإرسال. حاول مرة أخرى.' : 'Failed to resend. Please try again.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const entered = otpCode.trim();
+    if (entered.length !== 6) {
+      setOtpError(language === 'ar' ? 'يرجى إدخال الكود المكوّن من 6 أرقام.' : 'Please enter the 6-digit code.');
+      return;
+    }
+    if (entered !== generatedOtp) {
+      setOtpError(language === 'ar' ? 'الكود غير صحيح. يرجى المحاولة مرة أخرى.' : 'Incorrect code. Please try again.');
+      return;
+    }
+    // OTP verified — complete registration
+    setOtpModalVisible(false);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    await completeRegistration();
+  };
+
+  const completeRegistration = async () => {
     setIsLoading(true);
     try {
       await signUp({ email, password, name, phone: '', dob, gender });
@@ -302,11 +400,13 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
             </View>
             {confirmPasswordError ? <Text style={s.errorHint}>{confirmPasswordError}</Text> : null}
 
-            <TouchableOpacity style={s.signUpButton} onPress={handleSignUp} disabled={isLoading}>
-              {isLoading ? (
+            <TouchableOpacity style={s.signUpButton} onPress={handleSignUp} disabled={isLoading || isSendingOtp}>
+              {(isLoading || isSendingOtp) ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={s.signUpText}>Sign Up</Text>
+                <Text style={s.signUpText}>
+                  {language === 'ar' ? 'إنشاء حساب' : 'Sign Up'}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -430,6 +530,88 @@ export function SignUpScreen({ onGoToLogin }: { onGoToLogin: () => void }): Reac
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* OTP Verification Modal */}
+      <Modal visible={otpModalVisible} transparent animationType="fade">
+        <View style={s.modalOverlay}>
+          <View style={s.modalContent}>
+            <Text style={s.modalTitle}>
+              {language === 'ar' ? 'التحقق من البريد الإلكتروني' : 'Verify Your Email'}
+            </Text>
+            <Text style={s.modalDesc}>
+              {language === 'ar' 
+                ? `أرسلنا رمز التحقق المكون من 6 أرقام إلى\n${email}` 
+                : `We sent a 6-digit verification code to\n${email}`}
+            </Text>
+
+            <TextInput
+              ref={otpInputRef}
+              style={s.codeBox}
+              keyboardType="number-pad"
+              maxLength={6}
+              value={otpCode}
+              onChangeText={setOtpCode}
+              placeholder="000000"
+              placeholderTextColor="#CBD5E1"
+            />
+
+            {otpError ? (
+              <Text style={{ color: '#EF4444', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+                {otpError}
+              </Text>
+            ) : null}
+
+            <View style={s.modalActions}>
+              <TouchableOpacity 
+                style={[s.modalBtn, { backgroundColor: '#F1F5F9' }]} 
+                onPress={() => {
+                  setOtpModalVisible(false);
+                  if (cooldownRef.current) clearInterval(cooldownRef.current);
+                }}
+                disabled={isVerifying}
+              >
+                <Text style={{ color: '#475569', fontWeight: '600' }}>
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[s.modalBtn, { backgroundColor: '#161B22' }]} 
+                onPress={handleVerifyOtp}
+                disabled={isVerifying || otpCode.length !== 6}
+              >
+                {isVerifying ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>
+                    {language === 'ar' ? 'تحقق' : 'Verify'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ marginTop: 20, alignItems: 'center' }}>
+              {otpResendCooldown > 0 ? (
+                <Text style={{ color: '#64748B', fontSize: 13 }}>
+                  {language === 'ar' 
+                    ? `إعادة إرسال الرمز خلال ${otpResendCooldown} ثانية` 
+                    : `Resend code in ${otpResendCooldown}s`}
+                </Text>
+              ) : (
+                <TouchableOpacity onPress={handleResendOtp} disabled={isSendingOtp}>
+                  {isSendingOtp ? (
+                    <ActivityIndicator size="small" color="#161B22" />
+                  ) : (
+                    <Text style={{ color: '#161B22', fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' }}>
+                      {language === 'ar' ? 'إعادة إرسال الرمز' : 'Resend Code'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
       </Modal>
 
 

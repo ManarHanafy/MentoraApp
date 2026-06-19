@@ -248,6 +248,9 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
   const [isPaused, setIsPaused] = useState(false);
   const [showRoadmapModal, setShowRoadmapModal] = useState(false);
   const breathAnim = React.useRef(new Animated.Value(1)).current;
+  // Prevents loadData() from overriding an exercise that was specifically chosen
+  // via navigation params (e.g. from the HomeScreen notification queue)
+  const exerciseSetFromParamsRef = React.useRef(false);
 
   useEffect(() => {
     if (countdown !== null && !isPaused && ((suggestedExercise?.exerciseType || '').toLowerCase().includes('breath') || (suggestedExercise?.name || '').toLowerCase().includes('breath'))) {
@@ -319,8 +322,44 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
     }
   }, [route?.params?.category]);
 
+  useEffect(() => {
+    if (route?.params?.openSuggested === true) {
+      setShowHistoryOnly(false);
+      setSessionFinished(false);
+      setCountdown(null);
+      
+      (async () => {
+        try {
+          const suggested = await ExerciseService.getSuggestedExercises();
+          const safeSuggested = suggested || [];
+          let ex = route?.params?.exerciseToStart;
+          if (!ex && safeSuggested.length > 0) ex = safeSuggested[0];
+          
+          if (ex) {
+            if (ex.exerciseCode) {
+              const details = await ExerciseService.getExerciseDetailsFromServer(ex.exerciseCode);
+              ex = { ...ex, ...details };
+            }
+            // Mark that exercise was set from params — loadData should not override it
+            exerciseSetFromParamsRef.current = true;
+            setSuggestedExercise(ex);
+            setIsAiSession(true);
+            // Clear the flag after 3s (enough time for loadData to finish)
+            setTimeout(() => { exerciseSetFromParamsRef.current = false; }, 3000);
+          }
+        } catch (err) {
+          console.warn('Failed to handle openSuggested in useEffect', err);
+        }
+      })();
 
-  const loadData = async () => {
+      try {
+        navigation.setParams({ openSuggested: undefined, exerciseToStart: null });
+      } catch (_) {}
+    }
+  }, [route?.params?.openSuggested, route?.params?.exerciseToStart]);
+
+
+  const loadData = async (triggerSync = true) => {
     setLoading(true);
     try {
       const [completed, suggested] = await Promise.all([
@@ -333,22 +372,23 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       const safeSuggested = suggested || [];
       
       // Filter out suggested exercises that are already completed to avoid duplicate items
-      const suggestedNotInCompleted = safeSuggested.filter(s => 
-        !uniqueCompleted.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
-      );
+      const suggestedNotInCompleted = ExerciseService.filterActiveSuggestions(safeSuggested, uniqueCompleted);
       
       // Combine completed and active suggested exercises as the AI exercises list
       const aiExercises = [...uniqueCompleted, ...suggestedNotInCompleted];
       
       setExercises(aiExercises);
       setHistory(uniqueCompleted);
-      setPendingQueue(safeSuggested);
+      setPendingQueue(suggestedNotInCompleted);
 
-      if (route?.params?.openSuggested === true && !showHistoryOnly) {
+      if (route?.params?.openSuggested === true) {
+        setShowHistoryOnly(false);
+        setSessionFinished(false);
+        setCountdown(null);
         let ex = route.params.exerciseToStart;
-        if (!ex && safeSuggested.length > 0) ex = safeSuggested[0];
+        if (!ex && suggestedNotInCompleted.length > 0) ex = suggestedNotInCompleted[0];
         
-        if (ex && !suggestedExercise) {
+        if (ex) {
           // Enrich with library details if missing or generic
           if (ex.exerciseCode) {
             const details = await ExerciseService.getExerciseDetailsFromServer(ex.exerciseCode);
@@ -357,23 +397,40 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
           setSuggestedExercise(ex);
           setIsAiSession(true);
           if (route?.params?.exerciseToStart) {
-             navigation.setParams({ exerciseToStart: null });
+             try { navigation.setParams({ exerciseToStart: null }); } catch (_) {}
           }
         }
+        try { navigation.setParams({ openSuggested: undefined }); } catch (_) {}
       } else if (
         !showHistoryOnly &&
-        safeSuggested.length > 0 &&
+        suggestedNotInCompleted.length > 0 &&
         !suggestedExercise &&
+        !exerciseSetFromParamsRef.current &&
         !route?.params?.openRoadmap &&
         !route?.params?.category
       ) {
-        let ex = safeSuggested[0];
+        let ex = suggestedNotInCompleted[0];
         if (ex.exerciseCode) {
            const details = await ExerciseService.getExerciseDetailsFromServer(ex.exerciseCode);
            ex = { ...ex, ...details };
         }
         setSuggestedExercise(ex);
         setIsAiSession(true);
+      }
+
+      // Background Restore Sync
+      if (triggerSync) {
+        ExerciseService.restoreUserData().then(async () => {
+          const freshCompleted = await ExerciseService.getCompletedExercises();
+          const freshSuggested = await ExerciseService.getSuggestedExercises();
+          const hasCompletedChanged = freshCompleted.length !== safeCompleted.length;
+          const hasSuggestedChanged = freshSuggested.length !== safeSuggested.length;
+          if (hasCompletedChanged || hasSuggestedChanged) {
+            loadData(false);
+          }
+        }).catch((err) => {
+          console.warn('[ExercisesScreen] Background restoreUserData failed:', err);
+        });
       }
     } catch (e) {
       console.error(e);
@@ -384,7 +441,6 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         setShowHistoryOnly(true);
         navigation.setParams({ openRoadmap: undefined });
       }
-
     }
   };
 
@@ -406,12 +462,18 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
         }
       }
 
+      const completedIndex = pendingQueue.findIndex(ex =>
+        ex.queueId == finalQueueId ||
+        ex.id == currentEx.id ||
+        (ex.exerciseCode && ex.exerciseCode == currentEx.exerciseCode)
+      );
+
       // 2. Save progress
       await ExerciseService.saveCompletedExercise(currentEx);
       await ExerciseService.removeSuggestedExercise(finalQueueId);
 
       // 3. Reset UI state
-      navigation.setParams({ exerciseToStart: null });
+      try { navigation.setParams({ exerciseToStart: null }); } catch (_) {}
       setCountdown(null);
       setSessionFinished(false);
 
@@ -424,17 +486,24 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
       const safeSuggested = suggested || [];
       const safeCompleted = completed || [];
       const uniqueCompleted = Array.from(new Map(safeCompleted.map(item => [item.id, item])).values());
-      const suggestedNotInCompleted = safeSuggested.filter(s => 
-        !uniqueCompleted.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
-      );
+      const suggestedNotInCompleted = ExerciseService.filterActiveSuggestions(safeSuggested, uniqueCompleted);
       const aiExercises = [...uniqueCompleted, ...suggestedNotInCompleted];
 
       setExercises(aiExercises);
       setHistory(uniqueCompleted);
+      setPendingQueue(suggestedNotInCompleted);
 
       // 5. Flow transition
-      if (safeSuggested.length > 0 && isAiSession) {
-        setSuggestedExercise(safeSuggested[0]);
+      if (suggestedNotInCompleted.length > 0 && isAiSession) {
+        let nextEx = suggestedNotInCompleted[0];
+        if (completedIndex >= 0 && completedIndex < suggestedNotInCompleted.length) {
+          nextEx = suggestedNotInCompleted[completedIndex];
+        }
+        if (nextEx.exerciseCode) {
+          const details = await ExerciseService.getExerciseDetailsFromServer(nextEx.exerciseCode);
+          nextEx = { ...nextEx, ...details };
+        }
+        setSuggestedExercise(nextEx);
       } else {
         setSuggestedExercise(null);
         setIsAiSession(false);
@@ -610,7 +679,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                     </TouchableOpacity>
                   </View>
                 </View>
-              ) : ((ex.exerciseType || '').toLowerCase().includes('breath') || (ex.name || '').toLowerCase().includes('breath')) ? (
+              ) : (hasTimer && ((ex.exerciseType || '').toLowerCase().includes('breath') || (ex.name || '').toLowerCase().includes('breath'))) ? (
                 <TouchableOpacity 
                   style={[s.startNowBtn, { backgroundColor: colors.primary, flexDirection: 'row', gap: 6 }]} 
                   onPress={() => setCountdown(ex.durationMinutes * 60)}
@@ -618,7 +687,7 @@ export function ExercisesScreen({ route }: any): React.ReactElement {
                   <PlayIcon color="#FFF" />
                   <Text style={[s.startNowText, { color: '#FFF' }]}>{language === 'ar' ? 'جلسة تنفس موجهة' : 'Guided Breathing'}</Text>
                 </TouchableOpacity>
-              ) : (((ex.exerciseType || '').toLowerCase().includes('sleep') || (ex.exerciseType || '').toLowerCase().includes('relax') || (ex.exerciseType || '').toLowerCase().includes('mindful')) && (ex.durationMinutes || 0) > 0) ? (
+              ) : hasTimer ? (
                 <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
                   <PlayIcon /><Text style={s.startNowText}>{language === 'ar' ? `بدء المؤقت (${ex.durationMinutes} د)` : `Start Timer (${ex.durationMinutes} min)`}</Text>
                 </TouchableOpacity>

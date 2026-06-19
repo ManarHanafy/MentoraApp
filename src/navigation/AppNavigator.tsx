@@ -66,6 +66,7 @@ function MainTabs(): React.ReactElement {
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: true,
+        tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
           fontSize: 10,
           marginTop: -5,
@@ -151,6 +152,10 @@ export function AppNavigator(): React.ReactElement {
     setHasCompletedFirstLaunch(true);
   }, []);
 
+  // Determine if we should show the first launch tour:
+  // Skip it if: (1) user already completed it, OR (2) user is already logged in / has a saved account
+  const shouldShowFirstLaunch = !hasCompletedFirstLaunch && !isLoggedIn && !hasCompletedOnboarding;
+
   let content: React.ReactNode;
   if (isLoading || !firstLaunchChecked) {
     content = (
@@ -158,7 +163,7 @@ export function AppNavigator(): React.ReactElement {
         <Text style={[typography.body, { color: colors.textMuted }]}>Loading...</Text>
       </View>
     );
-  } else if (!hasCompletedFirstLaunch) {
+  } else if (shouldShowFirstLaunch) {
     content = <FirstLaunchOnboardingScreen onComplete={handleFirstLaunchComplete} />;
   } else if (!isLoggedIn) {
     content = <AuthStack />;

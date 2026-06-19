@@ -29,7 +29,7 @@ export const MoodService = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ journal_text: message.trim() })
+          body: JSON.stringify({ content: message.trim() })
         });
 
         if (response.ok) {
@@ -37,47 +37,8 @@ export const MoodService = {
           const aiSuggested = data.suggested_exercises || data.suggestedExercises || data.SuggestedExercises || [];
           
           if (aiSuggested && aiSuggested.length > 0) {
-            // Re-use the complex logic from JournalScreen to match exercises to library
-            const allExercises = await ExerciseService.getAllExercises();
-            const enrichedSuggestions = aiSuggested.map((aiEx: any, idx: number) => {
-                const exerciseId = aiEx.id || aiEx.exerciseId || aiEx.ExerciseId;
-                const code = aiEx.exerciseCode || aiEx.ExerciseCode || aiEx.id || '';
-                
-                const dbMatch = allExercises.find(ex => 
-                    (exerciseId && ex.id === exerciseId) || 
-                    (code && ex.exerciseCode === code)
-                );
-                
-                const libraryDetails = ExerciseService.getExerciseDetailsByCode(code || (dbMatch as any)?.exerciseCode);
-                
-                if (dbMatch) {
-                   const isNameCode = dbMatch.name === code || dbMatch.name?.includes('_');
-                   return {
-                      ...dbMatch,
-                      name: (isNameCode && libraryDetails.name) ? libraryDetails.name : (dbMatch.name || libraryDetails.name),
-                      description: dbMatch.description || libraryDetails.description,
-                      exerciseType: dbMatch.exerciseType || libraryDetails.exerciseType,
-                      durationMinutes: (libraryDetails.durationMinutes !== undefined) ? libraryDetails.durationMinutes : (dbMatch.durationMinutes || 5),
-                      instructions: dbMatch.instructions || libraryDetails.instructions,
-                      exerciseCode: code || dbMatch.exerciseCode
-                   };
-                }
-
-                return {
-                    id: exerciseId || code || `ai_${Date.now()}_${idx}`,
-                    name: libraryDetails.name || 'AI Suggested Exercise',
-                    description: libraryDetails.description || `Recommended for ${aiEx.parameter || 'wellness'}`,
-                    exerciseType: libraryDetails.exerciseType || 'AI Suggestion',
-                    durationMinutes: libraryDetails.durationMinutes || 5,
-                    difficulty: 'Medium',
-                    instructions: libraryDetails.instructions || 'Follow the on-screen prompts.',
-                    isActive: true,
-                    exerciseCode: code
-                };
-            });
-            
-            await ExerciseService.saveSuggestedExercises(enrichedSuggestions);
-            return { success: true, exercises: enrichedSuggestions };
+            await ExerciseService.saveSuggestedExercises(aiSuggested);
+            return { success: true, exercises: aiSuggested };
           }
         }
       }

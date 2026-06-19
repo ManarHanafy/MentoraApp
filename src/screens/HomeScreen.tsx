@@ -207,25 +207,30 @@ export function HomeScreen(): React.ReactElement {
           await AsyncStorage.removeItem(alertKey);
           await loadData(); // refresh pendingQueue in UI
 
-          if (flag === 'exercises') {
-            Alert.alert(
-              'Session Complete',
-              'Mentora has suggested new exercises based on your conversation.',
-              [
-                {
-                  text: 'View Exercises',
-                  onPress: () => (navigation as any).navigate('Exercises', { openSuggested: true }),
-                },
-                { text: 'Later', style: 'cancel' },
-              ]
-            );
-          } else if (flag === 'none') {
-            Alert.alert(
-              'Session Ended',
-              'Your conversation session has been completed and summarized.',
-              [{ text: 'OK' }]
-            );
-          }
+          // Alert 1 — always shown
+          Alert.alert(
+            'Session Completed',
+            'Session completed successfully.',
+            [{
+              text: 'OK',
+              onPress: () => {
+                if (flag === 'exercises') {
+                  // Alert 2 — only when exercises were returned
+                  Alert.alert(
+                    'Exercises Available',
+                    'Personalized exercises are available based on your session.',
+                    [
+                      {
+                        text: 'Start Exercises',
+                        onPress: () => (navigation as any).navigate('Exercises', { openSuggested: true }),
+                      },
+                      { text: 'Later', style: 'cancel' },
+                    ]
+                  );
+                }
+              },
+            }]
+          );
         }
       }, 45000);
 
@@ -274,10 +279,10 @@ export function HomeScreen(): React.ReactElement {
     return `${pad(m)}:${pad(s)}`;
   };
 
-  const loadData = async () => {
+  const loadData = async (triggerSync = true) => {
     try {
       const completed = await ExerciseService.getCompletedExercises();
-      setRecentHistory(completed.reverse());
+      setRecentHistory([...completed].reverse());
       
       const suggestedRes = await ExerciseService.getSuggestedExercises();
       setPendingQueue(suggestedRes || []);
@@ -326,6 +331,21 @@ export function HomeScreen(): React.ReactElement {
         journalCount,
         chatCount,
       });
+
+      // Background Restore Sync
+      if (triggerSync) {
+        ExerciseService.restoreUserData().then(async () => {
+          const freshCompleted = await ExerciseService.getCompletedExercises();
+          const freshSuggested = await ExerciseService.getSuggestedExercises();
+          const hasCompletedChanged = freshCompleted.length !== completed.length;
+          const hasSuggestedChanged = (freshSuggested || []).length !== (suggestedRes || []).length;
+          if (hasCompletedChanged || hasSuggestedChanged) {
+            loadData(false);
+          }
+        }).catch((err) => {
+          console.warn('[HomeScreen] Background restoreUserData failed:', err);
+        });
+      }
 
     } catch(e) {}
   };
@@ -386,6 +406,9 @@ export function HomeScreen(): React.ReactElement {
   const fillWidth = (moodLevel / 5) * 100;
   const thumbLeft = Math.max(0, Math.min(TRACK_WIDTH - 18, (moodLevel / 5) * TRACK_WIDTH - 9));
 
+  const activeSuggested = ExerciseService.filterActiveSuggestions(pendingQueue, recentHistory);
+  const activeSuggestedCount = activeSuggested.length;
+
   return (
     <ScrollView
       ref={scrollViewRef}
@@ -398,9 +421,9 @@ export function HomeScreen(): React.ReactElement {
         <Text style={styles.greeting}>{greeting}, {displayName}</Text>
         <TouchableOpacity style={styles.bellBtn} onPress={() => setShowNotifications(true)} accessibilityLabel="Notifications">
           <BellIcon color={colors.textPrimary} size={24} />
-          {pendingQueue.length > 0 && (
+          {activeSuggestedCount > 0 && (
               <View style={{position: 'absolute', top: -2, right: -2, backgroundColor: 'red', borderRadius: 10, width: 20, height: 20, alignItems:'center', justifyContent:'center'}}>
-                 <Text style={{color: 'white', fontSize: 12, fontWeight: 'bold'}}>{pendingQueue.length}</Text>
+                 <Text style={{color: 'white', fontSize: 12, fontWeight: 'bold'}}>{activeSuggestedCount}</Text>
               </View>
           )}
         </TouchableOpacity>
@@ -421,9 +444,7 @@ export function HomeScreen(): React.ReactElement {
                {(() => {
                   // Dynamic Roadmap calculation:
                   const completedCount = recentHistory.length;
-                  const activeSuggested = pendingQueue.filter(s => 
-                     !recentHistory.some(c => c.id === s.id || (c.exerciseCode && c.exerciseCode === s.exerciseCode))
-                  );
+                  const activeSuggested = ExerciseService.filterActiveSuggestions(pendingQueue, recentHistory);
                   const totalCount = completedCount + activeSuggested.length;
                   const completionPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
                   const currentSuggested = activeSuggested.length > 0 ? activeSuggested[0] : null;
@@ -779,14 +800,14 @@ export function HomeScreen(): React.ReactElement {
           <Text style={[styles.recTitle, isRTL && { marginLeft: 0, marginRight: 10 }]}>{t.home.recommendedForYou}</Text>
         </View>
         
-        {pendingQueue.length > 0 ? (
+        {activeSuggested.length > 0 ? (
           <>
              <Text style={[typography.h3, { color: colors.white, marginTop: 4, marginBottom: 8, fontWeight: 'bold', textAlign: isRTL ? 'right' : 'left' }]}>
-               {pendingQueue[0].name}
+               {activeSuggested[0].name}
              </Text>
-             {pendingQueue.length > 1 && (
+             {activeSuggested.length > 1 && (
                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 16, textAlign: isRTL ? 'right' : 'left' }}>
-                 +{pendingQueue.length - 1} {t.home.moreWaiting}
+                 +{activeSuggested.length - 1} {t.home.moreWaiting}
                </Text>
              )}
           </>
@@ -799,7 +820,7 @@ export function HomeScreen(): React.ReactElement {
         <TouchableOpacity
           style={styles.startExerciseBtn}
           onPress={() => {
-            if (pendingQueue.length > 0) {
+            if (activeSuggested.length > 0) {
                (navigation as any).navigate('Exercises', { openSuggested: true });
             } else {
                (navigation as any).navigate('Exercises', { openSuggested: false });
@@ -809,7 +830,7 @@ export function HomeScreen(): React.ReactElement {
           accessibilityLabel="Start exercise"
         >
           <Text style={styles.startExerciseText}>
-            {pendingQueue.length > 0 ? `${t.home.startExercise} ${pendingQueue[0].name.slice(0, 15)}...` : t.home.seeCompleted}
+            {activeSuggested.length > 0 ? `${t.home.startExercise} ${activeSuggested[0].name.slice(0, 15)}...` : t.home.seeCompleted}
           </Text>
           <ArrowRightIcon color={colors.white} size={16} />
         </TouchableOpacity>

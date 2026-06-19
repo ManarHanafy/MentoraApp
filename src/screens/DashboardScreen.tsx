@@ -175,12 +175,12 @@ export function DashboardScreen(): React.ReactElement {
 
   useFocusEffect(
     React.useCallback(() => {
-      loadData();
+      loadData(true);
     }, [activeTab])
   );
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       const suggested = await ExerciseService.getSuggestedExercises();
       if (suggested && suggested.length > 0) {
@@ -218,8 +218,185 @@ export function DashboardScreen(): React.ReactElement {
       const userEmail = await AsyncStorage.getItem('@mentora_user_email');
       const journalKey = userEmail ? `@mentora_journal_entries_${userEmail.trim().toLowerCase()}` : '@mentora_journal_entries';
       const journalStored = await AsyncStorage.getItem(journalKey);
-      const journalEntries = journalStored ? JSON.parse(journalStored) : [];
+      const isExerciseLog = (e: any) =>
+        (e.fullContent || '').startsWith('__sync__') ||
+        (e.fullContent || '').startsWith('Completed exercise:');
+      let journalEntries = journalStored
+        ? (JSON.parse(journalStored) as any[]).filter(e => e.fullContent !== undefined && !isExerciseLog(e))
+        : [];
       
+      // Server Sync for Dashboard to get triggers & stats on fresh install
+      try {
+        if (token) {
+          const response = await fetch(`${API_BASE_URL}/Journals?PageSize=100`, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const serverItems = data.items || [];
+            
+            // Match and merge
+            const serverIdSet = new Set(journalEntries.map((e: any) => e.serverId).filter(Boolean));
+            
+            // Read skipped journal IDs
+            const skippedKey = userEmail ? `@mentora_skipped_journals_${userEmail.trim().toLowerCase()}` : '@mentora_skipped_journals';
+            let skippedIds: string[] = [];
+            try {
+              const skippedStr = await AsyncStorage.getItem(skippedKey);
+              if (skippedStr) skippedIds = JSON.parse(skippedStr);
+            } catch (err) {
+              console.warn('Failed to parse skipped journals list:', err);
+            }
+            const skippedSet = new Set(skippedIds.map(String));
+            
+            const newReconstructed: any[] = [];
+            let updatedLocalList = [...journalEntries];
+            
+            for (const sItem of serverItems) {
+              const sItemIdStr = String(sItem.id);
+              if (serverIdSet.has(sItem.id) || skippedSet.has(sItemIdStr)) {
+                continue;
+              }
+              
+              const sTime = new Date(sItem.createdAt).getTime();
+              let matchedIdx = updatedLocalList.findIndex(le => {
+                if (le.serverId) return false;
+                const leTime = parseInt(le.id, 10);
+                if (isNaN(leTime)) return false;
+                // Aligned to 2-minute tolerance to match JournalScreen
+                return Math.abs(leTime - sTime) < 120000;
+              });
+              
+              if (matchedIdx !== -1) {
+                updatedLocalList[matchedIdx] = {
+                  ...updatedLocalList[matchedIdx],
+                  serverId: sItem.id
+                };
+              } else {
+                try {
+                  const detailRes = await fetch(`${API_BASE_URL}/Journals/${sItem.id}`, {
+                    method: 'GET',
+                    headers: {
+                      'Accept': 'application/json',
+                      'Authorization': `Bearer ${token}`
+                    }
+                  });
+                  if (detailRes.ok) {
+                    const details = await detailRes.json();
+                    
+                    // Reconstruct content by joining match_text if main text is empty
+                    const rawText = details.content || details.Content || details.journal_text || details.journalText || details.JournalText || '';
+                    const matchedItems = details.matched_items || [];
+                    const matchTexts: string[] = [];
+
+                    for (const mItem of matchedItems) {
+                      const subItems = mItem.items || [];
+                      for (const sub of subItems) {
+                        if (sub.match_text && !matchTexts.includes(sub.match_text)) {
+                          matchTexts.push(sub.match_text);
+                        }
+                      }
+                    }
+
+                    const journalText = rawText || matchTexts.join('\n');
+                    const normalizedText = journalText.trim();
+
+                    // Skip completed exercise sync logs or empty entries (e.g. dummy/sync logs with empty matches)
+                    const isCompletedOrEmpty = 
+                      !normalizedText || 
+                      normalizedText.startsWith('__sync__') || 
+                      normalizedText.startsWith('Completed exercise:') || 
+                      normalizedText.includes('Completed exercise') || 
+                      normalizedText.includes('__sync__');
+
+                    if (isCompletedOrEmpty) {
+                      skippedSet.add(sItemIdStr);
+                      continue;
+                    }
+
+                    const dateStr = new Date(sItem.createdAt).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                    });
+                    const tagsList = sItem.tags || [];
+                    const titleText = details.title ||
+                      (normalizedText ? normalizedText.substring(0, 50) : null) ||
+                      (language === 'ar' ? 'بلا عنوان' : 'Untitled');
+                    
+                    const reconstructed = {
+                      id: sTime.toString(),
+                      serverId: sItem.id,
+                      title: titleText,
+                      preview: normalizedText.substring(0, 80) + (normalizedText.length > 80 ? '…' : ''),
+                      fullContent: journalText,
+                      date: dateStr,
+                      tags: tagsList,
+                      type: 'text',
+                      locked: false
+                    };
+                    newReconstructed.push(reconstructed);
+                  }
+                } catch (err) {
+                  console.warn(`[DashboardScreen] Failed to fetch details for journal ${sItem.id}`, err);
+                }
+              }
+            }
+            
+            // Save updated skipped journal list
+            if (skippedSet.size > skippedIds.length) {
+              try {
+                await AsyncStorage.setItem(skippedKey, JSON.stringify(Array.from(skippedSet)));
+              } catch (err) {
+                console.warn('Failed to save skipped journals list:', err);
+              }
+            }
+            
+            if (newReconstructed.length > 0 || updatedLocalList.some((le, idx) => le.serverId !== journalEntries[idx]?.serverId)) {
+              const raw = [...newReconstructed, ...updatedLocalList];
+              // Deduplicate by serverId then by local id
+              const seenServerIds = new Set<number>();
+              const seenLocalIds = new Set<string>();
+              journalEntries = raw.filter((e: any) => {
+                if (e.serverId !== undefined) {
+                  if (seenServerIds.has(e.serverId)) return false;
+                  seenServerIds.add(e.serverId);
+                }
+                if (seenLocalIds.has(e.id)) return false;
+                seenLocalIds.add(e.id);
+                return true;
+              });
+              journalEntries.sort((a: any, b: any) => {
+                const aVal = parseInt(a.id, 10) || 0;
+                const bVal = parseInt(b.id, 10) || 0;
+                return bVal - aVal;
+              });
+              await AsyncStorage.setItem(journalKey, JSON.stringify(journalEntries));
+            }
+          }
+        }
+        
+        // Sync exercises and goals in the background (only on initial showSpinner load to prevent loops)
+        if (showSpinner) {
+          ExerciseService.restoreUserData().then(async () => {
+            const freshCompleted = await ExerciseService.getCompletedExercises();
+            const freshSuggested = await ExerciseService.getSuggestedExercises();
+            const hasCompletedChanged = freshCompleted.length !== completed.length;
+            const hasSuggestedChanged = freshSuggested.length !== suggested.length;
+            if (hasCompletedChanged || hasSuggestedChanged) {
+              loadData(false);
+            }
+          }).catch(e => {
+            console.warn('Dashboard failed to sync exercises/goals', e);
+          });
+        }
+      } catch (syncErr) {
+        console.warn('Dashboard failed to sync journals from server', syncErr);
+      }
+
       setStats(prev => ({
         ...prev,
         totalExercises: completed.length,

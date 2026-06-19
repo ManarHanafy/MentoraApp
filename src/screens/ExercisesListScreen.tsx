@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, TextInput, ActivityIndicator, Modal, Linking } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Modal, Linking } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { colors, typography } from '../theme';
 import { ArrowLeftIcon, StarIcon } from '../components/Icons';
 import { Exercise, ExerciseService } from '../services/exerciseService';
+import { NotificationService } from '../services/notificationService';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   Search, 
   Clock, 
@@ -53,6 +56,9 @@ const TIPS = {
 
 export function ExercisesListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { language } = useLanguage();
+  const insets = useSafeAreaInsets();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [history, setHistory] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,10 +68,44 @@ export function ExercisesListScreen(): React.ReactElement {
   const [showHistoryOnly, setShowHistoryOnly] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [sessionFinished, setSessionFinished] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((text: string) => {
+    setSearch(text);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearch(text);
+    }, 200);
+  }, []);
 
   useEffect(() => {
-    loadData();
+    // If a specific exercise was passed from the notification/home queue, open it directly
+    const exerciseToStart: Exercise | undefined = route?.params?.exerciseToStart;
+    if (exerciseToStart) {
+      const code = exerciseToStart.exerciseCode || String(exerciseToStart.id);
+      const localDetails = ExerciseService.getExerciseDetailsByCode(code);
+      setSuggestedExercise({ ...exerciseToStart, ...localDetails });
+      setShowHistoryOnly(false);
+      // Enrich in background
+      ExerciseService.getExerciseDetailsFromServer(code)
+        .then(details => setSuggestedExercise(prev => prev ? { ...prev, ...details } : null))
+        .catch(() => {});
+      setLoading(false);
+    } else {
+      loadData();
+    }
   }, []);
+
+  // Reload data every time screen comes into focus (handles cross-device restore)
+  useFocusEffect(
+    useCallback(() => {
+      // Don't override the exerciseToStart param on focus
+      if (!route?.params?.exerciseToStart) {
+        loadData(false, true);
+      }
+    }, [])
+  );
 
   useEffect(() => {
     let timer: any;
@@ -74,30 +114,47 @@ export function ExercisesListScreen(): React.ReactElement {
     } else if (countdown === 0) {
       setCountdown(null);
       setSessionFinished(true);
+      // Fire mood log reminder notification when timer finishes
+      NotificationService.sendMoodLogReminderNotification(language === 'ar').catch(() => {});
     }
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (showLoading = true, triggerSync = true) => {
+    if (showLoading) setLoading(true);
     try {
-      const [all, completed, suggested] = await Promise.all([
-        ExerciseService.getAllExercises(),
+      // Use instant local data for exercises list - no network wait
+      const all = ExerciseService.getAllExercises();
+      const [completed, suggested] = await Promise.all([
         ExerciseService.getCompletedExercises(),
         ExerciseService.getSuggestedExercises()
       ]);
       setExercises(all);
       setHistory(completed);
 
-      const uncompletedSuggested = suggested.filter(s => !completed.some(c => c.id === s.id));
+      const uncompletedSuggested = ExerciseService.filterActiveSuggestions(suggested, completed);
 
       if (uncompletedSuggested.length > 0 && !showHistoryOnly) {
         const firstEx = uncompletedSuggested[0];
         const code = firstEx.exerciseCode || String(firstEx.id);
-        const details = await ExerciseService.getExerciseDetailsFromServer(code);
-        setSuggestedExercise({ ...firstEx, ...details });
+        // Show the exercise immediately with local data
+        const localDetails = ExerciseService.getExerciseDetailsByCode(code);
+        setSuggestedExercise({ ...firstEx, ...localDetails });
+        if (showLoading) setLoading(false);
+        // Then enrich with server details in background
+        ExerciseService.getExerciseDetailsFromServer(code).then(details => {
+          setSuggestedExercise(prev => prev ? { ...prev, ...details } : null);
+        }).catch(() => {});
+        if (triggerSync) {
+          triggerBackgroundSync(completed, suggested);
+        }
+        return; // Already cleared loading
       } else {
         setSuggestedExercise(null);
+      }
+
+      if (triggerSync) {
+        triggerBackgroundSync(completed, suggested);
       }
     } catch (e) {
       console.error(e);
@@ -106,34 +163,85 @@ export function ExercisesListScreen(): React.ReactElement {
     }
   };
 
+  const triggerBackgroundSync = (oldCompleted: any[], oldSuggested: any[]) => {
+    ExerciseService.restoreUserData().then(async () => {
+      const freshCompleted = await ExerciseService.getCompletedExercises();
+      const freshSuggested = await ExerciseService.getSuggestedExercises();
+      const hasCompletedChanged = freshCompleted.length !== oldCompleted.length;
+      const hasSuggestedChanged = freshSuggested.length !== oldSuggested.length;
+      if (hasCompletedChanged || hasSuggestedChanged) {
+        loadData(false, false);
+      }
+    }).catch(() => {});
+  };
+
   const onExerciseDone = async () => {
-    if (suggestedExercise) {
-      await ExerciseService.saveCompletedExercise(suggestedExercise);
-    }
-    setShowHistoryOnly(true);
-    setSuggestedExercise(null);
+    const completedEx = suggestedExercise;
     setSessionFinished(false);
-    loadData();
+
+    if (completedEx) {
+      const queueId = (completedEx as any).queueId || completedEx.id;
+
+      // Get current list of active suggestions
+      const completed = await ExerciseService.getCompletedExercises();
+      const suggested = await ExerciseService.getSuggestedExercises();
+      const uncompletedSuggested = ExerciseService.filterActiveSuggestions(suggested, completed);
+
+      // Find completed index
+      const completedIndex = uncompletedSuggested.findIndex(ex =>
+        ex.queueId == queueId ||
+        ex.id == completedEx.id ||
+        (ex.exerciseCode && ex.exerciseCode == completedEx.exerciseCode)
+      );
+
+      // Save and remove
+      await ExerciseService.saveCompletedExercise(completedEx).catch(() => {});
+      await ExerciseService.removeSuggestedExercise(queueId).catch(() => {});
+
+      // Reload fresh lists
+      const freshCompleted = await ExerciseService.getCompletedExercises();
+      const freshSuggested = await ExerciseService.getSuggestedExercises();
+      const freshUncompleted = ExerciseService.filterActiveSuggestions(freshSuggested, freshCompleted);
+
+      setExercises(ExerciseService.getAllExercises());
+      setHistory(freshCompleted);
+
+      // Transition to next suggestion or show history
+      if (freshUncompleted.length > 0 && !showHistoryOnly) {
+        let nextEx = freshUncompleted[0];
+        if (completedIndex >= 0 && completedIndex < freshUncompleted.length) {
+          nextEx = freshUncompleted[completedIndex];
+        }
+        const code = nextEx.exerciseCode || String(nextEx.id);
+        const localDetails = ExerciseService.getExerciseDetailsByCode(code);
+        setSuggestedExercise({ ...nextEx, ...localDetails });
+
+        // Enrich in background
+        ExerciseService.getExerciseDetailsFromServer(code).then(details => {
+          setSuggestedExercise(prev => prev ? { ...prev, ...details } : null);
+        }).catch(() => {});
+      } else {
+        setSuggestedExercise(null);
+        setShowHistoryOnly(true);
+      }
+    } else {
+      setSuggestedExercise(null);
+      setShowHistoryOnly(true);
+    }
   };
 
   const handleSelectExercise = async (ex: Exercise) => {
-    setLoading(true);
-    try {
-      const code = ex.exerciseCode || String(ex.id);
-      const details = await ExerciseService.getExerciseDetailsFromServer(code);
-      setSuggestedExercise({ ...ex, ...details });
-      setShowHistoryOnly(false);
-      setSessionFinished(false);
-      setCountdown(null);
-    } catch (err) {
-      console.warn('Error selecting exercise:', err);
-      setSuggestedExercise(ex);
-      setShowHistoryOnly(false);
-      setSessionFinished(false);
-      setCountdown(null);
-    } finally {
-      setLoading(false);
-    }
+    // Show exercise immediately with local data (no spinner)
+    const code = ex.exerciseCode || String(ex.id);
+    const localDetails = ExerciseService.getExerciseDetailsByCode(code);
+    setSuggestedExercise({ ...ex, ...localDetails });
+    setShowHistoryOnly(false);
+    setSessionFinished(false);
+    setCountdown(null);
+    // Enrich with server details in background (no spinner)
+    ExerciseService.getExerciseDetailsFromServer(code).then(details => {
+      setSuggestedExercise(prev => prev ? { ...prev, ...details } : null);
+    }).catch(() => {});
   };
 
   const onRepeat = () => {
@@ -150,10 +258,10 @@ export function ExercisesListScreen(): React.ReactElement {
     }
   };
 
-  const filteredExercises = exercises.filter(ex => 
+  const filteredExercises = useMemo(() => exercises.filter(ex =>
     (activeTab === 'All' || (ex.exerciseType && ex.exerciseType.includes(activeTab))) &&
-    (ex.name && ex.name.toLowerCase().includes(search.toLowerCase()))
-  );
+    (ex.name && ex.name.toLowerCase().includes(debouncedSearch.toLowerCase()))
+  ), [exercises, activeTab, debouncedSearch]);
 
   const tipData = TIPS[activeTab as keyof typeof TIPS] || TIPS.All;
 
@@ -164,23 +272,21 @@ export function ExercisesListScreen(): React.ReactElement {
 
     return (
       <View style={s.container}>
-        <View style={s.darkHeader}>
-          <SafeAreaView>
-            <View style={s.headerTop}>
-              <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
-                 <ArrowLeftIcon size={24} color="#FFFFFF" />
+        <View style={[s.darkHeader, { paddingTop: Math.max(insets.top, 8) }]}>
+          <View style={s.headerTop}>
+            <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+               <ArrowLeftIcon size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={s.headerActions}>
+              <TouchableOpacity>
+                <Heart size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <View style={s.headerActions}>
-                <TouchableOpacity>
-                  <Heart size={24} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
             </View>
-            <View style={s.headerContent}>
-               <Text style={s.headerTitle}>{ex.name}</Text>
-               <Text style={s.headerSubTitle}>{ex.durationMinutes} min . {ex.exerciseType}</Text>
-            </View>
-          </SafeAreaView>
+          </View>
+          <View style={s.headerContent}>
+             <Text style={s.headerTitle}>{ex.name}</Text>
+             <Text style={s.headerSubTitle}>{ex.durationMinutes} min . {ex.exerciseType}</Text>
+          </View>
         </View>
 
         <ScrollView style={s.scrollContent} showsVerticalScrollIndicator={false}>
@@ -204,10 +310,10 @@ export function ExercisesListScreen(): React.ReactElement {
              {sessionFinished ? (
                <View style={s.actionRow}>
                   <TouchableOpacity style={[s.startNowBtn, { flex: 1, backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                     <Text style={[s.startNowText, { color: colors.white }]}>Done</Text>
+                     <Text style={[s.startNowText, { color: colors.white }]}>{language === 'ar' ? 'تم' : 'Done'}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[s.startNowBtn, { flex: 1, marginLeft: 10, backgroundColor: colors.white }]} onPress={onRepeat}>
-                     <Text style={s.startNowText}>Repeat</Text>
+                     <Text style={s.startNowText}>{language === 'ar' ? 'تكرار' : 'Repeat'}</Text>
                   </TouchableOpacity>
                </View>
              ) : countdown !== null && countdown > 0 ? (
@@ -218,11 +324,11 @@ export function ExercisesListScreen(): React.ReactElement {
                   </View>
              ) : hasTimer ? (
                  <TouchableOpacity style={s.startNowBtn} onPress={() => setCountdown(ex.durationMinutes * 60)}>
-                    <Play size={16} color="#161B22" /><Text style={s.startNowText}>Start Now</Text>
+                    <Play size={16} color="#161B22" /><Text style={s.startNowText}>{language === 'ar' ? 'ابدأ الآن' : 'Start Now'}</Text>
                  </TouchableOpacity>
              ) : (
                  <TouchableOpacity style={[s.startNowBtn, { backgroundColor: colors.success }]} onPress={onExerciseDone}>
-                    <Text style={[s.startNowText, { color: colors.white }]}>Done</Text>
+                    <Text style={[s.startNowText, { color: colors.white }]}>{language === 'ar' ? 'إكمال التمرين' : 'Complete Exercise'}</Text>
                  </TouchableOpacity>
              )}
           </View>
@@ -265,14 +371,14 @@ export function ExercisesListScreen(): React.ReactElement {
 
   // VIEW 2: FULL LIST
   return (
-    <SafeAreaView style={s.safeArea}>
+    <View style={[s.safeArea, { paddingTop: insets.top }]}>
       <View style={s.listHeaderRow}>
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
           <ArrowLeftIcon size={24} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={s.searchContainer}>
           <Search size={18} color="#A0AEC0" style={{ marginRight: 8 }} />
-          <TextInput style={s.searchInput} placeholder="Search exercises..." value={search} onChangeText={setSearch}/>
+          <TextInput style={s.searchInput} placeholder="Search exercises..." value={search} onChangeText={handleSearchChange}/>
         </View>
       </View>
       
@@ -318,7 +424,7 @@ export function ExercisesListScreen(): React.ReactElement {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

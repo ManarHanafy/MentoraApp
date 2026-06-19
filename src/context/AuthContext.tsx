@@ -166,13 +166,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
       if (loggedIn === 'true' && email) {
         try {
-          const { OnboardingService } = require('../services/onboardingService');
-          const status = await OnboardingService.getStatus();
+          // Only sync backend onboarding status if the user hasn't already been marked as onboarded locally.
+          // This prevents the backend from overriding our login-time bypass (where we force true for existing accounts).
           const userOnboardingKey = `@mentora_onboarding_done_${email.trim().toLowerCase()}`;
-          await AsyncStorage.setItem(userOnboardingKey, status.completed ? 'true' : 'false');
-          setState((s) => ({ ...s, hasCompletedOnboarding: status.completed }));
+          const localOnboarding = await AsyncStorage.getItem(userOnboardingKey);
+          if (localOnboarding !== 'true') {
+            const { OnboardingService } = require('../services/onboardingService');
+            const status = await OnboardingService.getStatus();
+            await AsyncStorage.setItem(userOnboardingKey, status.completed ? 'true' : 'false');
+            setState((s) => ({ ...s, hasCompletedOnboarding: status.completed }));
+          }
+          // If already 'true', no need to sync — keep it as is (returning user bypass)
         } catch (err) {
           console.warn('[AuthContext] Sync onboarding status failed:', err);
+        }
+
+        // Trigger background user data restore on app startup
+        try {
+          const { ExerciseService } = require('../services/exerciseService');
+          ExerciseService.restoreUserData().catch((err: any) => {
+            console.warn('[AuthContext] Background restoreUserData on startup failed:', err);
+          });
+        } catch (restoreErr) {
+          console.warn('[AuthContext] Failed to trigger background restoreUserData on startup:', restoreErr);
         }
       }
     } catch {
@@ -203,21 +219,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           // Save password for silent re-login
           await AsyncStorage.setItem('@mentora_user_password', password);
           
-          // Check onboarding status from backend
+          // Check onboarding status from backend (default to true on login for existing account)
           let backendOnboarded = true;
           try {
             const { OnboardingService } = require('../services/onboardingService');
             const status = await OnboardingService.getStatus();
-            backendOnboarded = status.completed;
+            // Force true for login as existing account bypasses onboarding
+            backendOnboarded = true;
           } catch (err) {
             console.warn('[AuthContext] Fetch onboarding status on login failed:', err);
           }
 
           const userOnboardingKey = `@mentora_onboarding_done_${email.trim().toLowerCase()}`;
-          await AsyncStorage.setItem(userOnboardingKey, backendOnboarded ? 'true' : 'false');
+          await AsyncStorage.setItem(userOnboardingKey, 'true');
           
           const { ExerciseService } = require('../services/exerciseService');
           ExerciseService.clearCache();
+          // Clear processed restoration cache so restoreUserData re-syncs fresh on this device
+          const restoreKey = await ExerciseService.getUserKey('@processed_restorations');
+          await AsyncStorage.removeItem(restoreKey);
+          ExerciseService.restoreUserData().catch((err: any) => {
+            console.warn('[AuthContext] Background restoreUserData on login failed:', err);
+          });
           
           setState((s) => ({ 
             ...s, 
@@ -225,7 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
             email: email, 
             userName: name,
             hasAccount: true,
-            hasCompletedOnboarding: backendOnboarded,
+            hasCompletedOnboarding: true,
           }));
           return { success: true };
         }
@@ -296,11 +319,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         }
 
         // Check if this social user has completed onboarding before
-        let backendOnboarded = false;
+        let backendOnboarded = true;
         try {
           const { OnboardingService } = require('../services/onboardingService');
           const status = await OnboardingService.getStatus();
-          backendOnboarded = status.completed;
+          // Force true to bypass onboarding for logged in accounts
+          backendOnboarded = true;
         } catch (err) {
           console.warn('[AuthContext] Fetch onboarding status on social login failed:', err);
         }
@@ -314,11 +338,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         ]);
 
         const userOnboardingKey = `@mentora_onboarding_done_${email.trim().toLowerCase()}`;
-        await AsyncStorage.setItem(userOnboardingKey, backendOnboarded ? 'true' : 'false');
+        await AsyncStorage.setItem(userOnboardingKey, 'true');
         await AsyncStorage.setItem('@mentora_user_password', autoPassword);
         
         const { ExerciseService } = require('../services/exerciseService');
         ExerciseService.clearCache();
+        // Clear processed restoration cache so restoreUserData re-syncs fresh on this device
+        const restoreKey = await ExerciseService.getUserKey('@processed_restorations');
+        await AsyncStorage.removeItem(restoreKey);
+        ExerciseService.restoreUserData().catch((err: any) => {
+          console.warn('[AuthContext] Background restoreUserData on social login failed:', err);
+        });
         
         setState((s) => ({ 
           ...s, 
@@ -326,7 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
           email: email, 
           userName: resolvedName,
           hasAccount: true,
-          hasCompletedOnboarding: backendOnboarded,
+          hasCompletedOnboarding: true,
         }));
         return { success: true };
       } catch (e: any) {
@@ -420,6 +450,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
         const { ExerciseService } = require('../services/exerciseService');
         ExerciseService.clearCache();
+        // Clear restoration cache for new account
+        const restoreKey = await ExerciseService.getUserKey('@processed_restorations');
+        await AsyncStorage.removeItem(restoreKey);
 
         setState((s) => ({
           ...s,

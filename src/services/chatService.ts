@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config/env';
 import { ExerciseService } from './exerciseService';
+import { NotificationService } from './notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface ChatMessage {
@@ -192,6 +193,15 @@ export const ChatService = {
           data.SuggestedExercises || [];
         if (aiSuggested.length > 0) {
           await ExerciseService.saveSuggestedExercises(aiSuggested);
+          // Notify user that new exercises are ready
+          try {
+            const lang = await AsyncStorage.getItem('@mentora_app_language');
+            const isAr = lang === 'ar';
+            await NotificationService.sendExercisesReadyNotification(
+              aiSuggested.length,
+              isAr
+            );
+          } catch (_) {}
         }
         return { ...data, _exercises: aiSuggested };
       }
